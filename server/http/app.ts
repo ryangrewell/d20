@@ -40,7 +40,7 @@ import * as admin from '../services/admin';
 import { listAudit } from '../services/audit';
 import { visibleMessages } from '../services/chat';
 import { loadCampaign } from '../context';
-import { CreateCharacterInput, CreatureInput, EncounterInput, ImportCharacterInput, ItemInput, JournalInput, UpdateCharacterInput } from '@shared/schemas/characters';
+import { CreateCharacterInput, CreatureInput, EncounterInput, ImportCharacterInput, ItemInput, JournalInput, QuickEncounterInput, UpdateCharacterInput } from '@shared/schemas/characters';
 
 type Env = { Variables: { actor: Actor } };
 
@@ -193,6 +193,7 @@ export function createApp(deps: Deps, verify: TokenVerifier, extra?: (app: Hono<
   // ------------------------------------------------------------- encounters
   app.get('/campaigns/:cid/encounters', async (c) => c.json(await encounters.listEncounters(deps, c.get('actor'), id(c, 'cid'))));
   app.post('/campaigns/:cid/encounters', async (c) => c.json(await encounters.createEncounter(deps, c.get('actor'), id(c, 'cid'), await body(c, EncounterInput)), 201));
+  app.post('/campaigns/:cid/quick-encounters', async (c) => c.json(await encounters.createQuickEncounter(deps, c.get('actor'), id(c, 'cid'), await body(c, QuickEncounterInput)), 201));
   app.patch('/campaigns/:cid/encounters/:eid', async (c) => c.json(await encounters.updateEncounter(deps, c.get('actor'), id(c, 'cid'), id(c, 'eid'), await body(c, EncounterInput))));
   app.delete('/campaigns/:cid/encounters/:eid', async (c) => {
     await encounters.deleteEncounter(deps, c.get('actor'), id(c, 'cid'), id(c, 'eid'));

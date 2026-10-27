@@ -7,6 +7,7 @@ import { useCampaigns, useCreateCampaign } from '@/lib/api/hooks';
 import { zodResolver } from '@/lib/forms';
 import { Badge, Button, Card, EmptyState, ErrorNotice, Field, Input, Spinner, Textarea } from '@/components/ui/primitives';
 import { Dialog } from '@/components/ui/dialog';
+import { EnemyBaselineFields, parseBaseline } from '@/features/campaigns/QuickEncounterDialog';
 
 export function DashboardPage() {
   const { data, isLoading, error, refetch } = useCampaigns();
@@ -83,10 +84,14 @@ function CreateCampaignDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   const navigate = useNavigate();
   const create = useCreateCampaign();
   const form = useForm({ resolver: zodResolver(schema), defaultValues: { title: '', description: '', meetingUrl: '' } });
+  const [enemy, setEnemy] = useState({ hp: '', ac: '', init: '0' });
+  const baseline = parseBaseline(enemy);
   const onSubmit = form.handleSubmit(async (v) => {
-    const c = await create.mutateAsync({ title: v.title, description: v.description, settings: v.meetingUrl ? { meetingUrl: v.meetingUrl } : {} });
+    if (baseline === 'invalid') return;
+    const c = await create.mutateAsync({ title: v.title, description: v.description, settings: { ...(v.meetingUrl ? { meetingUrl: v.meetingUrl } : {}), ...(baseline ? { enemyBaseline: baseline } : {}) } });
     onOpenChange(false);
     form.reset();
+    setEnemy({ hp: '', ac: '', init: '0' });
     navigate(`/campaigns/${c.id}`);
   });
   return (
@@ -102,6 +107,12 @@ function CreateCampaignDialog({ open, onOpenChange }: { open: boolean; onOpenCha
         <Field label="Video call link (optional)" htmlFor="meetingUrl" hint="Zoom or Teams link players can join from the table." error={form.formState.errors.meetingUrl?.message}>
           <Input id="meetingUrl" type="url" placeholder="https://zoom.us/j/…" {...form.register('meetingUrl')} />
         </Field>
+        <fieldset className="space-y-2 rounded-lg border border-border p-3">
+          <legend className="px-1 text-sm font-medium">Typical enemy (optional)</legend>
+          <p className="text-xs text-muted">An ordinary foe in your game. Quick encounters scale minions, elites and bosses from it.</p>
+          <EnemyBaselineFields {...enemy} onChange={setEnemy} />
+          {baseline === 'invalid' && <p className="text-xs text-danger">Use whole numbers, with HP of at least 1.</p>}
+        </fieldset>
         <div className="flex justify-end gap-2 pt-2">
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel

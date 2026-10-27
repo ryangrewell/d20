@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus, Skull, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Skull, Trash2, Zap } from 'lucide-react';
+import { QuickEncounterDialog } from './QuickEncounterDialog';
 import { toast } from 'sonner';
 import type { CampaignDashboardDto } from '@shared/dto';
 import type { CreatureTemplate, EncounterTemplate } from '@shared/model';
@@ -62,7 +63,7 @@ export function CreaturesTab({ data }: { data: CampaignDashboardDto }) {
         ))}
       </div>
       {editing && <CreatureDialog campaignId={cid} template={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
-      <EncountersSection campaignId={cid} />
+      <EncountersSection data={data} />
     </div>
   );
 }
@@ -144,7 +145,9 @@ function CreatureDialog({ campaignId, template, onClose }: { campaignId: string;
   );
 }
 
-export function EncountersSection({ campaignId }: { campaignId: string }) {
+export function EncountersSection({ data }: { data: CampaignDashboardDto }) {
+  const campaignId = data.campaign.id;
+  const [quick, setQuick] = useState(false);
   const encounters = useEncounters(campaignId);
   const creatures = useCreatures(campaignId);
   const qc = useQueryClient();
@@ -157,11 +160,19 @@ export function EncountersSection({ campaignId }: { campaignId: string }) {
           <h2 className="font-display text-lg font-semibold">Encounters</h2>
           <p className="text-sm text-muted">Groups of library creatures you can drop onto the map in one click, hidden until you reveal them.</p>
         </div>
-        <Button variant="outline" disabled={!creatures.data?.length} onClick={() => setEditing('new')}>
-          <Plus className="h-4 w-4" aria-hidden /> New encounter
-        </Button>
+        <div className="flex gap-2">
+          {data.campaign.status === 'ACTIVE' && (
+            <Button onClick={() => setQuick(true)}>
+              <Zap className="h-4 w-4" aria-hidden /> Quick encounter
+            </Button>
+          )}
+          <Button variant="outline" disabled={!creatures.data?.length} onClick={() => setEditing('new')}>
+            <Plus className="h-4 w-4" aria-hidden /> New encounter
+          </Button>
+        </div>
       </div>
-      {encounters.data?.length === 0 && <p className="text-sm text-faint">{creatures.data?.length ? 'No encounters yet.' : 'Add creatures first, then group them into encounters.'}</p>}
+      {quick && <QuickEncounterDialog campaign={data.campaign} isOwner={data.access.isOwner} onClose={() => setQuick(false)} onCreated={(e) => toast.success(`${e.name} saved. Place it from the table's GM tools.`)} />}
+      {encounters.data?.length === 0 && <p className="text-sm text-faint">{creatures.data?.length ? 'No encounters yet.' : 'Use Quick encounter to make one in a few clicks, or add creatures and group them yourself.'}</p>}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {encounters.data?.map((e) => (
           <Card key={e.id} className="p-4">

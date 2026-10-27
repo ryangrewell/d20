@@ -29,6 +29,7 @@ All routes are under `/api`. They need `Authorization: Bearer <Cognito ID token>
 | POST/PATCH/DELETE | `/campaigns/:cid/characters/:chid/items[/:iid]` | Inventory; owner or GM; `gmNote` GM-only |
 | GET/POST/PATCH/DELETE | `/campaigns/:cid/creatures[/:crid]` | GM-only creature library |
 | GET/POST/PATCH/DELETE | `/campaigns/:cid/encounters[/:eid]` | GM-only encounter templates (`groups: [{ creatureId, count }]`, ≤30 creatures) |
+| POST | `/campaigns/:cid/quick-encounters` | GM-only. Saves new creatures and an encounter in one transaction. Each group is `{ count, creatureId }` (reuse) or `{ count, creature }` (new); ≤20 enemies, ≤4 groups. Stats come from the client, scaled from `settings.enemyBaseline` |
 | GET/POST/PATCH/DELETE | `/campaigns/:cid/journal[/:jid]` | List returns only readable entries; writes GM-only. `visibility: GM_ONLY\|ALL\|SELECTED_PLAYERS` |
 | GET/POST | `/campaigns/:cid/delegations` | Owner grants `{ delegateSub, scope: SESSIONS\|NEXT_N_SESSIONS\|TIME_WINDOW, permissions }`; list (owner: all, delegate: own) |
 | POST | `/campaigns/:cid/delegations/:did/revoke` | Owner; rotates access epochs |

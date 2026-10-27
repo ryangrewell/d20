@@ -26,7 +26,11 @@ export type CampaignSettings = {
   allowSecretRolls: boolean;
   /** Players may pan/zoom freely instead of following the GM camera. */
   freeCamera: boolean;
+  /** The GM's "ordinary foe" in their system; Quick Encounter scales from it. */
+  enemyBaseline?: EnemyBaseline;
 };
+
+export type EnemyBaseline = { hp: number; ac?: number; initiativeMod: number };
 
 export type Campaign = {
   id: string;

@@ -9,3 +9,6 @@ playwright-report
 coverage
 *.tsbuildinfo
 .DS_Store
+
+# Brainstorm mockups
+.superpowers/

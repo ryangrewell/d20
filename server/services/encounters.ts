@@ -3,7 +3,8 @@ import { ulid } from 'ulid';
 import type { z } from 'zod';
 import { invalid, notFound } from '@shared/errors';
 import type { CreatureTemplate, EncounterTemplate, MapDefinition, Scene, SceneObject } from '@shared/model';
-import type { EncounterInput } from '@shared/schemas/characters';
+import type { EncounterInput, QuickEncounterInput } from '@shared/schemas/characters';
+import { MAX_QUICK_ENEMIES } from '@shared/quickEncounter';
 import { keys, type TxItem } from '../repo/db';
 import { loadCampaign, requireActiveCampaign, requireGM, type Actor, type Deps } from '../context';
 import type { Change } from '../realtime/fanout';
@@ -37,6 +38,28 @@ export async function createEncounter(deps: Deps, actor: Actor, campaignId: stri
   const e: EncounterTemplate = { id: ulid(), campaignId, ...input, createdAt: now, updatedAt: now };
   await deps.db.put({ ...keys.encounter(campaignId, e.id), entity: 'Encounter', ...e });
   return e;
+}
+
+/** Saves Quick Encounter's new creatures and the encounter together, so a failure leaves nothing half-made. */
+export async function createQuickEncounter(deps: Deps, actor: Actor, campaignId: string, input: z.output<typeof QuickEncounterInput>) {
+  requireActiveCampaign(await gm(deps, actor, campaignId));
+  if (input.groups.reduce((n, g) => n + g.count, 0) > MAX_QUICK_ENEMIES) throw invalid(`Quick encounters have at most ${MAX_QUICK_ENEMIES} enemies.`);
+  const reused = input.groups.flatMap((g) => ('creatureId' in g ? [{ creatureId: g.creatureId, count: g.count }] : []));
+  if (reused.length) await validateGroups(deps, campaignId, reused);
+  const now = deps.now().toISOString();
+  const created: CreatureTemplate[] = [];
+  const groups = input.groups.map((g) => {
+    if ('creatureId' in g) return { creatureId: g.creatureId, count: g.count };
+    const t: CreatureTemplate = { id: ulid(), campaignId, ...g.creature, createdAt: now, updatedAt: now };
+    created.push(t);
+    return { creatureId: t.id, count: g.count };
+  });
+  const encounter: EncounterTemplate = { id: ulid(), campaignId, name: input.name, notes: '', groups, createdAt: now, updatedAt: now };
+  await deps.db.transact([
+    ...created.map((t): TxItem => ({ Put: { Item: { ...keys.creature(campaignId, t.id), entity: 'Creature', ...t } } })),
+    { Put: { Item: { ...keys.encounter(campaignId, encounter.id), entity: 'Encounter', ...encounter } } },
+  ]);
+  return { encounter, creatures: created };
 }
 
 export async function updateEncounter(deps: Deps, actor: Actor, campaignId: string, id: string, input: z.output<typeof EncounterInput>) {

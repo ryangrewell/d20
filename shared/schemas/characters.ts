@@ -63,6 +63,20 @@ export const EncounterInput = z.object({
     .max(20),
 });
 
+/** Quick Encounter: each group either reuses a library creature or names a new one. */
+export const QuickEncounterInput = z.object({
+  name: plainText(80).pipe(z.string().min(1, 'Name the encounter')),
+  groups: z
+    .array(
+      z.union([
+        z.object({ count: z.number().int().min(1).max(20), creatureId: z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/) }),
+        z.object({ count: z.number().int().min(1).max(20), creature: CreatureInput }),
+      ]),
+    )
+    .min(1)
+    .max(4),
+});
+
 export const JournalInput = z.object({
   title: plainText(120).pipe(z.string().min(1, 'Give the entry a title')),
   body: plainText(50000).default(''),

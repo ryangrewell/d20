@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { ArrowRightLeft, Eye, EyeOff, Heart, Plus, Trash2, Users, X } from 'lucide-react';
+import { ArrowRightLeft, Eye, EyeOff, Heart, Plus, Trash2, Users, X, Zap } from 'lucide-react';
+import { QuickEncounterDialog } from '@/features/campaigns/QuickEncounterDialog';
 import { toast } from 'sonner';
 import type { SceneObject } from '@shared/model';
 import { Button, Field, Input, Select, cn } from '@/components/ui/primitives';
@@ -28,6 +29,8 @@ export function GMPanel({ engine }: { engine: SyncEngine }) {
   const creatures = useCreatures(campaignId);
   const characters = useCharacters(campaignId);
   const encounters = useEncounters(campaignId);
+  const campaign = useCampaign(campaignId);
+  const [quick, setQuick] = useState(false);
 
   return (
     <div className="scrollbar-thin h-full space-y-6 overflow-y-auto p-4">
@@ -38,7 +41,26 @@ export function GMPanel({ engine }: { engine: SyncEngine }) {
       )}
 
       <section className="space-y-3">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Place on map</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Place on map</h3>
+          {campaign.data && (
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setQuick(true)}>
+              <Zap className="h-3.5 w-3.5" aria-hidden /> Quick encounter
+            </Button>
+          )}
+        </div>
+        {quick && campaign.data && (
+          <QuickEncounterDialog
+            campaign={campaign.data.campaign}
+            isOwner={campaign.data.access.isOwner}
+            onClose={() => setQuick(false)}
+            onCreated={(enc) => {
+              // Straight into placement; hidden until the GM reveals them.
+              setTable({ spawn: { objectType: 'CREATURE', label: enc.name, tint: '#b23a48', visibility: 'GM_ONLY', encounterId: enc.id }, tool: 'spawn' });
+              toast.success(`Click the map to place ${enc.name}. Players won't see it until you reveal it.`);
+            }}
+          />
+        )}
         <div className="grid grid-cols-2 gap-1.5">
           {PRESETS.map((p) => (
             <button

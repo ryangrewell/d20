@@ -117,7 +117,8 @@ test('GM and player share a live, synchronized table', async ({ browser }) => {
   await expect(gm.getByText('Choose a scene')).toBeVisible();
   await gm.getByRole('button', { name: /^Keep hall/ }).first().click();
   await gm.getByRole('button', { name: 'Start session' }).click();
-  await expect(gm.getByText('live', { exact: true })).toBeVisible();
+  // Pause only appears once the session is live (the scene list also says "live", so match the control, not the text).
+  await expect(gm.getByRole('button', { name: 'Pause' })).toBeVisible();
   const tableUrl = gm.url();
 
   // --- Player opens the same table

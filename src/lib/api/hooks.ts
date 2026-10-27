@@ -42,6 +42,7 @@ export const encounterApi = {
   create: (cid: string, input: Record<string, unknown>) => api<EncounterTemplate>(`/campaigns/${cid}/encounters`, { body: input }),
   update: (cid: string, id: string, input: Record<string, unknown>) => api<EncounterTemplate>(`/campaigns/${cid}/encounters/${id}`, { method: 'PATCH', body: input }),
   remove: (cid: string, id: string) => api(`/campaigns/${cid}/encounters/${id}`, { method: 'DELETE' }),
+  quick: (cid: string, input: Record<string, unknown>) => api<{ encounter: EncounterTemplate; creatures: CreatureTemplate[] }>(`/campaigns/${cid}/quick-encounters`, { body: input }),
 };
 
 export const journalApi = {

@@ -6,11 +6,18 @@ import { FOG_LIMITS } from '../fog';
 export const UpdateProfileInput = z.object({ displayName: DisplayName });
 
 // ---------------------------------------------------------------- campaigns
+export const EnemyBaselineInput = z.object({
+  hp: z.number().int().min(1).max(100000),
+  ac: z.number().int().min(0).max(100).optional(),
+  initiativeMod: z.number().int().min(-50).max(50).default(0),
+});
+
 export const CampaignSettingsInput = z.object({
   meetingUrl: HttpsUrl.optional().or(z.literal('').transform(() => undefined)),
   playerWhispers: z.boolean().default(true),
   allowSecretRolls: z.boolean().default(true),
   freeCamera: z.boolean().default(true),
+  enemyBaseline: EnemyBaselineInput.optional(),
 });
 
 export const CreateCampaignInput = z.object({

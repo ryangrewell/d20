@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { toast } from 'sonner';
@@ -5,6 +6,7 @@ import type { CampaignDashboardDto } from '@shared/dto';
 import { campaignApi, qk, useCampaignMutation } from '@/lib/api/hooks';
 import { zodResolver } from '@/lib/forms';
 import { Button, Card, ErrorNotice, Field, Input, Textarea } from '@/components/ui/primitives';
+import { EnemyBaselineFields, parseBaseline } from './QuickEncounterDialog';
 
 const schema = z.object({
   title: z.string().trim().min(1, 'Required').max(80),
@@ -26,8 +28,15 @@ export function SettingsTab({ data }: { data: CampaignDashboardDto }) {
       allowSecretRolls: campaign.settings.allowSecretRolls,
     },
   });
+  const b = campaign.settings.enemyBaseline;
+  const [enemy, setEnemy] = useState({ hp: b ? String(b.hp) : '', ac: b?.ac !== undefined ? String(b.ac) : '', init: b ? String(b.initiativeMod) : '0' });
+  const baseline = parseBaseline(enemy);
   const save = useCampaignMutation(campaign.id, (v: z.output<typeof schema>) =>
-    campaignApi.update(campaign.id, { title: v.title, description: v.description, settings: { meetingUrl: v.meetingUrl, playerWhispers: v.playerWhispers, allowSecretRolls: v.allowSecretRolls } }),
+    campaignApi.update(campaign.id, {
+      title: v.title,
+      description: v.description,
+      settings: { meetingUrl: v.meetingUrl, playerWhispers: v.playerWhispers, allowSecretRolls: v.allowSecretRolls, ...(baseline && baseline !== 'invalid' ? { enemyBaseline: baseline } : {}) },
+    }),
   [[...qk.campaigns]]);
   const archive = useCampaignMutation(campaign.id, () => campaignApi.archive(campaign.id), [[...qk.campaigns]]);
   const disabled = !access.isOwner || campaign.status !== 'ACTIVE';
@@ -35,7 +44,7 @@ export function SettingsTab({ data }: { data: CampaignDashboardDto }) {
   return (
     <div className="max-w-2xl space-y-6">
       <Card className="p-6">
-        <form className="space-y-4" noValidate onSubmit={form.handleSubmit((v) => save.mutate(v, { onSuccess: () => toast.success('Settings saved') }))}>
+        <form className="space-y-4" noValidate onSubmit={form.handleSubmit((v) => baseline !== 'invalid' && save.mutate(v, { onSuccess: () => toast.success('Settings saved') }))}>
           {save.error && <ErrorNotice error={save.error} />}
           <Field label="Title" htmlFor="title" error={form.formState.errors.title?.message}>
             <Input id="title" disabled={disabled} {...form.register('title')} />
@@ -54,6 +63,12 @@ export function SettingsTab({ data }: { data: CampaignDashboardDto }) {
             <input type="checkbox" className="h-4 w-4 accent-[var(--color-accent)]" disabled={disabled} {...form.register('allowSecretRolls')} />
             Players may roll secretly to the GM
           </label>
+          <fieldset className="space-y-2 rounded-lg border border-border p-3">
+            <legend className="px-1 text-sm font-medium">Typical enemy</legend>
+            <p className="text-xs text-muted">An ordinary foe in your game. Quick encounters scale minions, elites and bosses from it.</p>
+            <EnemyBaselineFields {...enemy} disabled={disabled} onChange={setEnemy} />
+            {baseline === 'invalid' && <p className="text-xs text-danger">Use whole numbers, with HP of at least 1.</p>}
+          </fieldset>
           <Button type="submit" disabled={disabled} loading={save.isPending}>
             Save settings
           </Button>
