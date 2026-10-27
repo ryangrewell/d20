@@ -44,6 +44,11 @@ d('campaign lifecycle, tabletop and security', () => {
     expect(dash.body.members).toHaveLength(3);
   });
 
+  it('answers CORS preflight without credentials', async () => {
+    const res = await h.app.request('/api/campaigns', { method: 'OPTIONS', headers: { origin: 'https://d20.ryangrewell.com', 'access-control-request-method': 'GET' } });
+    expect(res.status).toBe(204);
+  });
+
   it('hides private campaigns from non-members (J1)', async () => {
     const r = await mallory.call('GET', `/campaigns/${campaignId}`);
     expect(r.status).toBe(404);

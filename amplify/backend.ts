@@ -126,7 +126,12 @@ const httpApi = new apigw.HttpApi(apiStack, 'HttpApi', {
     maxAge: Duration.hours(1),
   },
 });
-httpApi.addRoutes({ path: '/api/{proxy+}', methods: [apigw.HttpMethod.ANY], integration: new HttpLambdaIntegration('ApiIntegration', apiLambda) });
+// Explicit methods (not ANY) so API Gateway answers CORS preflight OPTIONS itself instead of forwarding them to Lambda.
+httpApi.addRoutes({
+  path: '/api/{proxy+}',
+  methods: [apigw.HttpMethod.GET, apigw.HttpMethod.POST, apigw.HttpMethod.PATCH, apigw.HttpMethod.DELETE],
+  integration: new HttpLambdaIntegration('ApiIntegration', apiLambda),
+});
 const stage = httpApi.defaultStage?.node.defaultChild as apigw.CfnStage | undefined;
 stage?.addPropertyOverride('DefaultRouteSettings', { ThrottlingBurstLimit: 200, ThrottlingRateLimit: 100 });
 

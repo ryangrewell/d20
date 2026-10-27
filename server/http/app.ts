@@ -67,8 +67,11 @@ export function createApp(deps: Deps, verify: TokenVerifier, extra?: (app: Hono<
 
   extra?.(app);
 
+  // Preflight requests never carry credentials; CORS headers are added by API Gateway (or the Vite proxy locally).
+  app.options('*', (c) => c.body(null, 204));
+
   app.use('*', async (c, next) => {
-    if (c.req.path === '/api/health' || c.req.path.startsWith('/api/dev/')) return next();
+    if (c.req.method === 'OPTIONS' || c.req.path === '/api/health' || c.req.path.startsWith('/api/dev/')) return next();
     const header = c.req.header('authorization') ?? '';
     const token = header.startsWith('Bearer ') ? header.slice(7) : '';
     if (!token) throw new AppError('UNAUTHENTICATED', 'Please sign in.');
