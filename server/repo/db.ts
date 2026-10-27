@@ -6,6 +6,7 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   BatchGetCommand,
+  BatchWriteCommand,
   DeleteCommand,
   DynamoDBDocumentClient,
   GetCommand,
@@ -38,6 +39,8 @@ export const keys = {
   item: (characterId: string, id: string) => ({ PK: `CHAR#${characterId}`, SK: `ITEM#${id}` }),
   characterAudit: (characterId: string, id: string) => ({ PK: `CHAR#${characterId}`, SK: `AUDIT#${id}` }),
   encounter: (campaignId: string, id: string) => ({ PK: `CAMP#${campaignId}`, SK: `ENCOUNTER#${id}` }),
+  undo: (sessionId: string, id: string) => ({ PK: `SESSION#${sessionId}`, SK: `UNDO#${id}` }),
+  checkpoint: (sceneId: string, id: string) => ({ PK: `SCENE#${sceneId}`, SK: `CHECKPOINT#${id}` }),
   journal: (campaignId: string, id: string) => ({ PK: `CAMP#${campaignId}`, SK: `JOURNAL#${id}` }),
   creature: (campaignId: string, id: string) => ({ PK: `CAMP#${campaignId}`, SK: `CREATURE#${id}` }),
   chat: (campaignId: string, id: string) => ({ PK: `CHAT#${campaignId}`, SK: `MSG#${id}` }),
@@ -140,6 +143,21 @@ export class Db {
       }
     }
     return out;
+  }
+
+  /** Non-atomic bulk put/delete in chunks of 25 with retry of unprocessed items. */
+  async batchWrite(ops: ({ put: Record<string, unknown> } | { delete: Key })[]) {
+    for (let i = 0; i < ops.length; i += 25) {
+      let pending: Record<string, unknown[]> | undefined = {
+        [this.table]: ops.slice(i, i + 25).map((o) => ('put' in o ? { PutRequest: { Item: o.put } } : { DeleteRequest: { Key: o.delete } })),
+      };
+      for (let attempt = 0; pending && Object.keys(pending).length && attempt < 8; attempt++) {
+        const r: { UnprocessedItems?: Record<string, unknown[]> } = await this.doc.send(new BatchWriteCommand({ RequestItems: pending as never }));
+        pending = r.UnprocessedItems && Object.keys(r.UnprocessedItems).length ? r.UnprocessedItems : undefined;
+        if (pending) await new Promise((res) => setTimeout(res, 50 * 2 ** attempt));
+      }
+      if (pending && Object.keys(pending).length) throw new Error('Batch write did not complete');
+    }
   }
 
   async transact(items: TxItem[]) {

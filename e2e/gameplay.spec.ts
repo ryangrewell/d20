@@ -126,6 +126,12 @@ test('character sheet, dice, loot pickup and initiative through the UI', async (
   await expect.poll(async () => Object.values((await table(g)).objects).map((o: any) => o.appearance.label)).toEqual(expect.arrayContaining(['Ogre 1', 'Ogre 2']));
   expect(Object.values((await table(p)).objects).map((o: any) => o.appearance.label)).not.toContain('Ogre 1');
 
+  // Ctrl/Cmd+Z undoes the whole encounter placement.
+  await g.getByRole('application').click({ position: { x: 5, y: 5 }, button: 'right' });
+  await g.keyboard.press('ControlOrMeta+z');
+  await expect(g.getByText('Undid: Place encounter')).toBeVisible();
+  await expect.poll(async () => Object.values((await table(g)).objects).map((o: any) => o.appearance.label)).not.toContain('Ogre 1');
+
   // GM shares a private journal entry from the table; the player is notified and can read it.
   await gm.call('POST', `/campaigns/${campaign.id}/journal`, { title: 'Torn map', body: 'X marks the crypt.' });
   await g.getByRole('tab', { name: 'Journal' }).click();

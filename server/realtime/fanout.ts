@@ -23,6 +23,7 @@ export type Change =
   | { kind: 'focus'; focus: PresenterFocus }
   | { kind: 'initiative'; state: InitiativeState }
   | { kind: 'character'; characterId: string; ownerSub: string }
+  | { kind: 'sceneRefresh'; sceneId: string; reason: 'undo' | 'checkpoint' }
   | { kind: 'journal'; entryId: string; title: string; readers: 'ALL' | 'GM_ONLY' | string[]; newlyShared: boolean }
   | { kind: 'access'; reason: 'epoch-rotated' | 'member-removed' };
 
@@ -89,6 +90,8 @@ export function projectChange(change: Change, a: Audience, activeSceneId: string
     case 'character':
       // Sheets are private to their owner and the GM; even the id is not sent to others.
       return isGM || (viewer.kind === 'player' && viewer.sub === change.ownerSub && a.kind === 'player') ? [{ type: 'CHARACTER_UPDATED', characterId: change.characterId }] : [];
+    case 'sceneRefresh':
+      return sceneVisible(change.sceneId) ? [{ type: 'SCENE_REFRESH', sceneId: change.sceneId, reason: change.reason }] : [];
     case 'journal': {
       if (isGM) return [{ type: 'JOURNAL_UPDATED', entryId: change.entryId, title: change.title, shared: false }];
       if (a.kind !== 'player') return [];

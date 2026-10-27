@@ -68,6 +68,10 @@ export const CommandPayloads = {
   presenterFocus: z.object({ sceneId: Id, center: Point, zoom: z.number().positive().max(16) }),
   /** GM places every creature of an encounter template around a point (hidden by default). */
   spawnEncounter: z.object({ encounterId: Id, sceneId: Id, x: z.number().finite(), y: z.number().finite(), visibility: Visibility.default('GM_ONLY') }),
+  /** GM undoes their most recent undoable map command (if nothing has changed since). */
+  undoLast: z.object({}),
+  /** GM replaces a scene's tokens and fog with a saved checkpoint. */
+  restoreCheckpoint: z.object({ sceneId: Id, checkpointId: Id }),
   /** A player (or GM) takes items from a visible loot pile into a character's inventory, atomically. */
   pickupLoot: z.object({ objectId: Id, entryId: z.string().min(1).max(40), characterId: Id, quantity: z.number().int().min(1).max(100000) }),
   /** Rolls initiative on the server for these tokens. Players may roll only for tokens they control. */

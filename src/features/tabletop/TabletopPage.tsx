@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
+  History,
+  Undo2,
   BookOpen,
   Brush,
   Crosshair,
@@ -39,6 +41,7 @@ import { CharacterPanel } from './panels/CharacterPanel';
 import { InitiativeTracker } from './panels/InitiativeTracker';
 import { LootCard } from './panels/LootCard';
 import { JournalView } from '@/features/journal/JournalView';
+import { CheckpointsDialog } from './panels/CheckpointsDialog';
 
 export default function TabletopPage({ display = false }: { display?: boolean }) {
   const { campaignId = '', sessionId = '' } = useParams();
@@ -127,11 +130,26 @@ function Table({ engine, campaignId, sessionId }: { engine: SyncEngine; campaign
   const session = snap.session;
   const meetingUrl = session.meetingUrl ?? snap.campaign.settings.meetingUrl;
 
+  const undo = useCallback(async () => {
+    try {
+      const r = await engine.command('undoLast', {});
+      toast.success(`Undid: ${(r.result as { label?: string } | undefined)?.label ?? 'last change'}`);
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
+  }, [engine]);
+
   // Tool keyboard shortcuts (V select, H pan, M measure, P ping, Esc select).
   useEffect(() => {
     const keys: Record<string, Tool> = { v: 'select', h: 'pan', m: 'measure', p: 'ping', ...(isGM ? { r: 'fog-reveal' as Tool, c: 'fog-conceal' as Tool } : {}) };
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement || e.metaKey || e.ctrlKey) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
+      if (isGM && (e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        void undo();
+        return;
+      }
+      if (e.metaKey || e.ctrlKey) return;
       if (e.key === 'Escape') setTable({ tool: 'select', selectedId: null });
       const t = keys[e.key.toLowerCase()];
       if (t) setTable({ tool: t });
@@ -145,7 +163,7 @@ function Table({ engine, campaignId, sessionId }: { engine: SyncEngine; campaign
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isGM, engine]);
+  }, [isGM, engine, undo]);
 
   const tools: { id: Tool; label: string; key: string; icon: typeof Hand; gm?: boolean }[] = [
     { id: 'select', label: 'Select & move', key: 'V', icon: MousePointer2 },
@@ -290,6 +308,11 @@ function Table({ engine, campaignId, sessionId }: { engine: SyncEngine; campaign
                   </>
                 )}
                 <span className="mx-1 h-6 w-px bg-border" aria-hidden />
+                {isGM && (
+                  <Button size="icon" variant="ghost" aria-label="Undo last map change (Ctrl/Cmd+Z)" title="Undo (Ctrl/Cmd+Z)" onClick={() => void undo()}>
+                    <Undo2 className="h-4 w-4" aria-hidden />
+                  </Button>
+                )}
                 <Button size="icon" variant="ghost" aria-label="Fit map to screen" title="Fit map" onClick={() => camRef.current?.fit()}>
                   <Maximize className="h-4 w-4" aria-hidden />
                 </Button>
@@ -384,6 +407,8 @@ function ScenesSidebar({ campaignId, engine }: { campaignId: string; engine: Syn
   const activeSceneId = useTable((s) => s.snapshot?.session.activeSceneId);
   const [creatingFor, setCreatingFor] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
+  const [checkpointsOpen, setCheckpointsOpen] = useState(false);
+  const activeScene = data?.scenes.find((s) => s.id === activeSceneId);
   if (collapsed)
     return (
       <button className="w-8 border-r border-border bg-surface text-muted hover:text-text" onClick={() => setCollapsed(false)} aria-label="Show scenes">
@@ -413,6 +438,12 @@ function ScenesSidebar({ campaignId, engine }: { campaignId: string; engine: Syn
         ))}
         {data?.scenes.length === 0 && <li className="px-2 text-xs text-faint">No scenes yet. Create one from a map below.</li>}
       </ul>
+      {activeScene && (
+        <button className="mx-2 mt-2 flex items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs text-muted hover:bg-surface-2 hover:text-text" onClick={() => setCheckpointsOpen(true)}>
+          <History className="h-3.5 w-3.5" aria-hidden /> Checkpoints for this scene…
+        </button>
+      )}
+      {checkpointsOpen && activeScene && <CheckpointsDialog campaignId={campaignId} sceneId={activeScene.id} sceneName={activeScene.name} engine={engine} onClose={() => setCheckpointsOpen(false)} />}
       <h2 className="mt-4 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted">Maps</h2>
       <ul className="space-y-0.5 px-2 pb-4">
         {(data?.maps ?? []).map((m) => (

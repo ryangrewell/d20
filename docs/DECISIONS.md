@@ -14,7 +14,7 @@
 
 **D-007 — Revisions allocated before the write transaction.** The session revision is bumped with an atomic counter, then the state/event/idempotency transaction runs. A failed transaction leaves a gap, which is harmless because revisions are monotonic, not contiguous.
 
-**D-008 — Inline publish (no outbox yet).** Events are persisted in the same transaction as the state change and published right after. If a publish fails, connected clients recover on their next resync (reconnect, scene/status change, conflict). Backlog: DynamoDB Streams–driven publisher for guaranteed delivery.
+**D-008 — Inline publish + pull-based catch-up (instead of a stream-driven outbox).** Events are persisted in the same transaction as the state change, published right away, and retried once. Every non-display client also reconciles against its own per-viewer event log every 20 s and when the tab regains focus (`GET /sessions/:sid/events?since=`), applying anything not yet seen by event id. A lost publish therefore shows up within ~20 s with no extra infrastructure. The scan re-reads a 25-revision window, because revisions are allocated before their write lands (D-007). A DynamoDB Streams publisher remains an option if push latency on failure ever matters.
 
 **D-009 — Fog as operations, evaluated on both sides.** Small, append-only, easy to sync and audit. The client rasterises at ≤2048 px. Reset deletes the operations. Large-history checkpoints to S3 are backlog (limit: 5000 ops/scene).
 
@@ -27,3 +27,7 @@
 **D-013 — TypeScript 6.0.** TS 7 is available, but typescript-eslint supports `<6.1`.
 
 **D-014 — Players see "waiting" until a session is LIVE/PAUSED.** GMs can prep in PLANNED sessions. Scene state lives on scenes (not sessions), so it persists across sessions. A new session inherits the previous session's active scene.
+
+**D-015 — GM undo is state-checked, per GM, and scoped to map commands.** Undoable commands (move/place/edit/remove/transfer token, place encounter, fog brush) store an inverse record (object states before/after, fog op seq) in the same transaction, TTL 24 h. `undoLast` reverts the GM's own latest record only if each object still has the exact state that command produced (ignoring revision/timestamps), so it never overwrites a later change by a player. Undo IDs use a monotonic ULID so same-millisecond records keep order. Not undoable: fog reset, scene switch, chat/dice, initiative, loot pickup.
+
+**D-016 — Checkpoints live in S3; restore is batched, not atomic.** A checkpoint is a JSON snapshot (tokens + fog ops) in S3 with a small DynamoDB index row, max 50 per scene. Restore replaces the scene via batch writes (DynamoDB transactions cap at 100 items), then emits `SCENE_REFRESH` so clients refetch. A failure part-way leaves a mix that re-running the restore repairs. Restored objects get revisions above anything clients hold.

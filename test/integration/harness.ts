@@ -29,8 +29,11 @@ export async function createHarness() {
   const config = loadConfig({ D20_TABLE: table, D20_BUCKET: 'd20-test-media', D20_DYNAMO_ENDPOINT: DYNAMO, D20_S3_ENDPOINT: S3, D20_DEV_JWT_SECRET: 'test-secret' });
   await ensureLocalTable(DYNAMO, config.region, table);
   const published: Published[] = [];
+  /** Tests can simulate realtime outages by returning true for channels that should fail. */
+  const control = { failPublish: (_channel: string) => false };
   const publisher: Publisher = {
     publish: async (channel, events) => {
+      if (control.failPublish(channel)) throw new Error('simulated publish failure');
       for (const e of events) published.push({ channel, event: e as Published['event'] });
     },
   };
@@ -55,7 +58,7 @@ export async function createHarness() {
     return { sub, name, token, call, command };
   }
 
-  return { deps, app, user, published, table };
+  return { deps, app, user, published, table, control };
 }
 
 export type Harness = Awaited<ReturnType<typeof createHarness>>;

@@ -43,6 +43,11 @@ export class Blobs {
     return new Uint8Array(await r.Body!.transformToByteArray());
   }
 
+  async getJson<T>(key: string): Promise<T> {
+    const r = await this.s3.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+    return JSON.parse(await r.Body!.transformToString()) as T;
+  }
+
   async putBytes(key: string, body: Uint8Array, contentType: string) {
     await this.s3.send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: body, ContentType: contentType }));
   }

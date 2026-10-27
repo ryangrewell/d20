@@ -33,6 +33,7 @@ import * as characters from '../services/characters';
 import * as creatures from '../services/creatures';
 import * as encounters from '../services/encounters';
 import * as journal from '../services/journal';
+import * as checkpoints from '../services/checkpoints';
 import { visibleMessages } from '../services/chat';
 import { loadCampaign } from '../context';
 import { CreateCharacterInput, CreatureInput, EncounterInput, ImportCharacterInput, ItemInput, JournalInput, UpdateCharacterInput } from '@shared/schemas/characters';
@@ -196,6 +197,17 @@ export function createApp(deps: Deps, verify: TokenVerifier, extra?: (app: Hono<
   app.patch('/campaigns/:cid/journal/:jid', async (c) => c.json(await journal.updateJournal(deps, c.get('actor'), id(c, 'cid'), id(c, 'jid'), await body(c, JournalInput))));
   app.delete('/campaigns/:cid/journal/:jid', async (c) => {
     await journal.deleteJournal(deps, c.get('actor'), id(c, 'cid'), id(c, 'jid'));
+    return c.json({ ok: true });
+  });
+
+  // ------------------------------------------------------------ checkpoints
+  app.get('/campaigns/:cid/scenes/:scid/checkpoints', async (c) => c.json(await checkpoints.listCheckpoints(deps, c.get('actor'), id(c, 'cid'), id(c, 'scid'))));
+  app.post('/campaigns/:cid/scenes/:scid/checkpoints', async (c) => {
+    const input = await body(c, z.object({ label: plainText(80).default('') }));
+    return c.json(await checkpoints.createCheckpoint(deps, c.get('actor'), id(c, 'cid'), id(c, 'scid'), input.label), 201);
+  });
+  app.delete('/campaigns/:cid/scenes/:scid/checkpoints/:cpid', async (c) => {
+    await checkpoints.deleteCheckpoint(deps, c.get('actor'), id(c, 'cid'), id(c, 'scid'), id(c, 'cpid'));
     return c.json({ ok: true });
   });
 

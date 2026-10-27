@@ -73,9 +73,13 @@ export async function commit(
     throw err;
   }
 
-  const results = await Promise.allSettled(bundles.map((b) => deps.publisher.publish(b.channel, [b.event])));
+  // One quick retry; if it still fails, clients recover via their periodic catch-up from the event log.
+  const publishOnce = (b: (typeof bundles)[number]) => deps.publisher.publish(b.channel, [b.event]);
+  const results = await Promise.allSettled(
+    bundles.map((b) => publishOnce(b).catch(() => new Promise<void>((resolve, reject) => setTimeout(() => publishOnce(b).then(resolve, reject), 250)))),
+  );
   results.forEach((r, i) => {
-    if (r.status === 'rejected') deps.log('warn', 'event publish failed; clients will recover via snapshot', { channel: bundles[i]!.channel.split('/').slice(0, 4).join('/'), revision });
+    if (r.status === 'rejected') deps.log('warn', 'event publish failed after retry; clients will catch up from the event log', { channel: bundles[i]!.channel.split('/').slice(0, 4).join('/'), revision });
   });
   return { revision, ts };
 }

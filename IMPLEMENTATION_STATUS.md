@@ -13,7 +13,7 @@ The spec's **first deliverable works locally end to end** and is covered by an a
 | `tsc -b` (app, server, scripts, tests) + `tsc -p amplify` | pass |
 | `eslint .` | pass |
 | Unit + web tests (25) | pass |
-| Integration tests vs DynamoDB Local + MinIO (26) | pass |
+| Integration tests vs DynamoDB Local + MinIO (30) | pass |
 | Playwright journeys (2): first deliverable, gameplay | pass |
 | `vite build` | pass |
 | `cdk synth` of Amplify backend (offline) | pass |
@@ -44,8 +44,9 @@ The spec's **first deliverable works locally end to end** and is covered by an a
 - [x] C03 GM / shared / per-user projections
 - [x] C04 Realtime token / scene / object updates
 - [x] C05 Named, coloured cursors (12 Hz throttle) and pings
-- [x] C06 Fog reveal/conceal (rect + brush), persisted ops, reset. S3 checkpoints not built
-- [~] C07 Snapshot-based reconnect/resync. `getEventsSince` exists but the client doesn't use it
+- [x] C06 Fog reveal/conceal (rect + brush), persisted ops, reset; scene checkpoints (tokens + fog) saved to S3 and restorable
+- [x] GM undo (Ctrl/Cmd+Z) for recent map commands, refusing to overwrite later changes
+- [x] C07 Snapshot-based reconnect/resync plus 20 s pull-based catch-up from the per-viewer event log (heals lost live updates)
 - [x] C08 Epoch rotation on member removal + negative tests (verified live)
 
 **Epic D — Gameplay** (MPO)
@@ -64,7 +65,7 @@ The spec's **first deliverable works locally end to end** and is covered by an a
 ## Active risks
 
 1. ~~AppSync Events contract~~ Verified live on d20.ryangrewell.com (2026-10-27): authorised subscribes, IAM publish of game events, presence re-stamping, and a removed member being cut off (subscribe denial + epoch rotation).
-2. **No outbox.** A failed publish after a committed write is only healed on the client's next resync. Planned fix: DynamoDB Streams publisher.
+2. **Lost live updates heal by polling, not push.** A publish that fails after one retry reaches clients via their 20 s catch-up (D-008), not instantly.
 3. **Map images are visible to players** (documented; `strictFog` is future work).
 4. Concurrent non-ended sessions on the same scene only notify the session that issued the command.
 5. Presence rate limit in Lambda is per container.
@@ -72,8 +73,7 @@ The spec's **first deliverable works locally end to end** and is covered by an a
 
 ## Next tasks
 
-1. Outbox publisher; GM undo for recent reversible commands; scene checkpoints.
-2. Phase 5 interior generator; Phase 6 delegation API/UI, admin dashboard, audit.
+1. Phase 5 interior generator; Phase 6 delegation API/UI, admin dashboard, audit.
 
 ## Manual AWS actions required
 

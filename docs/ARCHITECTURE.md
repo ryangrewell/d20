@@ -33,7 +33,7 @@ Fog is an ordered list of reveal/conceal operations over an initial state (`shar
 3. Fetch the authoritative snapshot (revision N); apply buffered events with revision > N, deduplicated by event id.
 4. Repeat on reconnect, scene change, session status change, `ACCESS_CHANGED`, or a write conflict.
 
-Revisions are monotonic per session but not contiguous for a given audience. Recovery relies on snapshots, not gap detection.
+Revisions are monotonic per session but not contiguous for a given audience. Recovery relies on snapshots, not gap detection. In addition, every 20 s (and on tab focus) a client pulls its own event log since its last snapshot and applies anything it missed, so a lost live update is healed without a reload (DECISIONS D-008). `SCENE_REFRESH` (fog undo, checkpoint restore) makes viewers refetch the snapshot.
 
 ## Access epochs
 
@@ -52,6 +52,8 @@ Channel paths include `accessEpoch`. Removing a member (and, later, revoking a d
 | Session | `SESSION#id` | `META` | `CAMP#id` / `SESSION#number` |
 | Session event | `SESSION#id` | `EVT#revision` (TTL) | |
 | Command idempotency | `SESSION#id` | `CMD#commandId` (TTL 24h) | |
+| GM undo record | `SESSION#id` | `UNDO#monotonic-ulid` (TTL 24h) | |
+| Scene checkpoint index | `SCENE#id` | `CHECKPOINT#id` (snapshot JSON in S3) | |
 | Scene | `SCENE#id` | `META` | `CAMP#id` / `SCENE#id` |
 | Scene object | `SCENE#id` | `OBJ#id` | `OBJ#id` / `OBJ` |
 | Fog op | `SCENE#id` | `FOG#seq` | |

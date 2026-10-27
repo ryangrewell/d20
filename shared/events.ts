@@ -56,6 +56,8 @@ export type DurableEventBody =
   | { type: 'CHARACTER_UPDATED'; characterId: string }
   /** Sent only to viewers who may read the entry; `shared` true when it was just shared with them. */
   | { type: 'JOURNAL_UPDATED'; entryId: string; title: string; shared: boolean }
+  /** A scene changed in bulk (undo of fog, checkpoint restore); viewers refetch their snapshot. */
+  | { type: 'SCENE_REFRESH'; sceneId: string; reason: 'undo' | 'checkpoint' }
   | { type: 'ACCESS_CHANGED'; reason: 'epoch-rotated' | 'member-removed' };
 
 /**

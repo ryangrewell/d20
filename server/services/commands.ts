@@ -23,6 +23,8 @@ import { loadCharacter } from './characters';
 import { initiativeHandlers } from './initiative';
 import { pickupLoot } from './loot';
 import { spawnEncounter } from './encounters';
+import { isUndoable, undoLast, undoWrite } from './undo';
+import { restoreCheckpoint } from './checkpoints';
 
 export type HandlerCtx = { deps: Deps; actor: Actor; session: GameSession; campaign: CampaignContext };
 export type HandlerOutput = { changes: Change[]; writes: TransactItem[]; result?: unknown; projectionSession?: GameSession };
@@ -75,6 +77,8 @@ const handlers: { [K in CommandType]: Handler<K> } = {
   ...initiativeHandlers,
   pickupLoot,
   spawnEncounter,
+  undoLast,
+  restoreCheckpoint,
   async moveToken(ctx, p) {
     requirePlayable(ctx);
     const sceneId = ctx.campaign.access.isGM ? await findObjectScene(ctx, p.objectId) : undefined;
@@ -382,6 +386,10 @@ export async function executeCommand(deps: Deps, actor: Actor, raw: unknown): Pr
 
   const handler = handlers[type] as Handler<typeof type>;
   const out = await handler({ deps, actor, session, campaign }, parsed.data as never);
+  if (campaign.access.isGM && isUndoable(type)) {
+    const undo = undoWrite(deps, actor, session.id, type, out);
+    if (undo) out.writes.push(undo);
+  }
   try {
     const { revision, ts } = await commit(deps, session, actor, out.changes, out.writes, {
       commandId,

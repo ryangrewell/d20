@@ -202,8 +202,9 @@ export async function getEventsSince(deps: Deps, actor: Actor, sessionId: string
   const ctx = await loadCampaign(deps, actor, session.campaignId, session);
   const rows = await deps.db.query<{ eventId: string; revision: number; ts: string; audiences: Record<string, DurableEventBody[]> }>(
     {
-      KeyConditionExpression: 'PK = :pk AND SK > :sk',
-      ExpressionAttributeValues: { ':pk': `SESSION#${sessionId}`, ':sk': `EVT#${String(since).padStart(12, '0')}` },
+      // Bounded range: other SESSION# rows (CMD#, UNDO#) must not match.
+      KeyConditionExpression: 'PK = :pk AND SK BETWEEN :from AND :to',
+      ExpressionAttributeValues: { ':pk': `SESSION#${sessionId}`, ':from': `EVT#${String(since + 1).padStart(12, '0')}`, ':to': 'EVT#~' },
     },
     { limit: 500, all: false },
   );

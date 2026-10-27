@@ -18,6 +18,10 @@ import { chatApi } from '@/lib/api/hooks';
 import { getTable, initialTableState, setTable, type TableObject } from './store';
 
 const CURSOR_TTL_MS = 8000;
+/** How often a client reconciles against the server event log in case a live update was lost. */
+const CATCH_UP_MS = 20_000;
+/** Revisions are allocated before their write lands, so re-scan a small window behind the head. */
+const CATCH_UP_OVERLAP = 25;
 
 export class SyncEngine {
   private transport: RealtimeTransport;
@@ -34,6 +38,10 @@ export class SyncEngine {
   private sweep: ReturnType<typeof setInterval>;
   private presenceChannel: string | null = null;
   private stops: (() => void)[] = [];
+  private snapshotRevision = 0;
+  private catchUpBase = 0;
+  private catchUpTimer: ReturnType<typeof setInterval> | null = null;
+  private catchingUp = false;
 
   constructor(
     private sessionId: string,
@@ -45,6 +53,11 @@ export class SyncEngine {
     this.stops.push(this.transport.onReconnect(() => void this.resync('reconnected')));
     this.sweep = setInterval(() => this.expireEphemeral(), 1000);
     window.addEventListener('beforeunload', this.onUnload);
+    // The Shared Display never polls: the event log is per-viewer and a GM's log includes GM-only items.
+    if (view !== 'shared') {
+      this.catchUpTimer = setInterval(() => void this.catchUp(), CATCH_UP_MS);
+      document.addEventListener('visibilitychange', this.onVisible);
+    }
   }
 
   async start() {
@@ -56,6 +69,8 @@ export class SyncEngine {
     this.sendPresence({ type: 'LEAVE' });
     window.removeEventListener('beforeunload', this.onUnload);
     clearInterval(this.sweep);
+    if (this.catchUpTimer) clearInterval(this.catchUpTimer);
+    document.removeEventListener('visibilitychange', this.onVisible);
     if (this.cursorTimer) clearTimeout(this.cursorTimer);
     for (const u of this.unsubs) u();
     for (const s of this.stops) s();
@@ -63,6 +78,28 @@ export class SyncEngine {
   }
 
   private onUnload = () => this.sendPresence({ type: 'LEAVE' });
+  private onVisible = () => document.visibilityState === 'visible' && void this.catchUp();
+
+  /**
+   * Pull-based safety net for lost live updates: fetch this viewer's events
+   * from the log and apply any not yet seen (deduplicated by event id).
+   */
+  async catchUp() {
+    if (this.disposed || this.catchingUp || this.resyncing || this.buffer) return;
+    this.catchingUp = true;
+    try {
+      const r = await api<{ events: DurableEvent[]; revision: number; truncated: boolean }>(`/sessions/${this.sessionId}/events?since=${this.catchUpBase}`);
+      if (this.disposed) return;
+      if (r.truncated) return void this.resync('catch-up');
+      const missed = r.events.filter((e) => e.revision > this.snapshotRevision && !this.seen.has(e.eventId));
+      for (const e of missed) this.applyDurable(e);
+      this.catchUpBase = Math.max(this.snapshotRevision, r.revision - CATCH_UP_OVERLAP, 0);
+    } catch {
+      // Network blips are fine; the next tick retries.
+    } finally {
+      this.catchingUp = false;
+    }
+  }
 
   /** Full resubscribe + snapshot. Coalesces concurrent requests. */
   async resync(reason: string) {
@@ -93,6 +130,8 @@ export class SyncEngine {
         this.buffer = [];
       }
       this.applySnapshot(snap);
+      this.snapshotRevision = snap.revision;
+      this.catchUpBase = Math.max(0, snap.revision - CATCH_UP_OVERLAP);
       const buffered = (this.buffer ?? []).filter((e) => e.revision > snap.revision).sort((a, b) => a.revision - b.revision);
       this.buffer = null;
       for (const e of buffered) this.applyDurable(e);
@@ -218,6 +257,12 @@ export class SyncEngine {
         if (item.shared && s.snapshot?.viewMode !== 'gm') toast.message(`The GM shared “${item.title}”`, { description: 'Open the Journal tab to read it.' });
         return;
       }
+      case 'SCENE_REFRESH':
+        if (item.sceneId === sceneId) {
+          if (item.reason === 'checkpoint' && s.snapshot?.viewMode !== 'gm') toast.message('The GM restored this scene to an earlier point.');
+          void this.resync('refresh');
+        }
+        return;
       case 'ACCESS_CHANGED':
         void this.resync('access');
         return;
