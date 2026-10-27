@@ -161,20 +161,17 @@ class AppSyncTransport implements RealtimeTransport {
   async subscribe(channel: string, onData: (e: unknown) => void) {
     const { events } = await import('aws-amplify/data');
     const ch = await events.connect(channel);
-    await new Promise<void>((resolve, reject) => {
-      let settled = false;
-      ch.subscribe({
-        next: (data: unknown) => onData(typeof data === 'string' ? JSON.parse(data) : data),
-        error: (err: unknown) => {
-          if (!settled) reject(new SubscribeDenied(String((err as Error)?.message ?? 'denied')));
-        },
-      });
-      // AppSync rejects unauthorised subscriptions asynchronously; give it a moment.
-      setTimeout(() => {
-        settled = true;
-        resolve();
-      }, 300);
-    });
+    const sub = ch.subscribe({
+      next: (message: unknown) => onData(unwrapAppSyncEvent(message)),
+      error: (err: unknown) => console.warn('[d20] realtime subscription error', channel.split('/').slice(0, 3).join('/'), err),
+    }) as { ready?: Promise<unknown> };
+    // Amplify resolves `ready` on subscribe_success and rejects on subscribe_error (e.g. our onSubscribe handler denying access).
+    try {
+      await sub.ready;
+    } catch (err) {
+      ch.close();
+      throw new SubscribeDenied(String((err as Error)?.message ?? 'denied'));
+    }
     this.channels.push(ch);
     this.status.emit('connected');
     return () => ch.close();
@@ -192,6 +189,17 @@ class AppSyncTransport implements RealtimeTransport {
   close() {
     for (const c of this.channels) c.close();
     this.hubStop?.();
+  }
+}
+
+/** Amplify delivers `{ id, type, event }` with `event` already parsed; tolerate raw or string payloads too. */
+export function unwrapAppSyncEvent(message: unknown): unknown {
+  const inner = message && typeof message === 'object' && 'event' in message ? (message as { event: unknown }).event : message;
+  if (typeof inner !== 'string') return inner;
+  try {
+    return JSON.parse(inner);
+  } catch {
+    return null;
   }
 }
 
