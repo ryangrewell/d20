@@ -1,0 +1,433 @@
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import {
+  ArrowLeft,
+  Brush,
+  Crosshair,
+  EyeOff,
+  Hand,
+  Hourglass,
+  Layers,
+  Maximize,
+  MessageSquare,
+  MonitorPlay,
+  MousePointer2,
+  Pause,
+  Play,
+  Plus,
+  Radio,
+  Ruler,
+  Shield,
+  Square,
+  SquareDashed,
+  Video,
+  Wand2,
+  Eraser,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import type { Camera } from '@shared/geometry/transform';
+import { useCampaign, campaignApi } from '@/lib/api/hooks';
+import { Badge, Button, Spinner, cn } from '@/components/ui/primitives';
+import { SyncEngine } from './sync';
+import { setTable, useTable, type Tool } from './store';
+import { TabletopCanvas } from './TabletopCanvas';
+import { ChatPanel } from './panels/ChatPanel';
+import { GMPanel } from './panels/GMPanel';
+
+export default function TabletopPage({ display = false }: { display?: boolean }) {
+  const { campaignId = '', sessionId = '' } = useParams();
+  const [engine, setEngine] = useState<SyncEngine | null>(null);
+  useEffect(() => {
+    const e = new SyncEngine(sessionId, display ? 'shared' : 'auto');
+    setEngine(e);
+    void e.start();
+    return () => e.dispose();
+  }, [sessionId, display]);
+
+  const status = useTable((s) => s.status);
+  const error = useTable((s) => s.error);
+  const snap = useTable((s) => s.snapshot);
+  if (!engine) return null;
+
+  if (status === 'denied') {
+    return (
+      <FullMessage title="This table isn't available">
+        <p>{error ?? 'You no longer have access to this session.'}</p>
+        <Link to="/dashboard" className="mt-6 inline-block">
+          <Button variant="outline">Back to campaigns</Button>
+        </Link>
+      </FullMessage>
+    );
+  }
+  if (!snap) {
+    return <FullMessage title="Opening the table">{status === 'error' ? <p className="text-danger">{error} · retrying…</p> : <Spinner label="Loading the scene" />}</FullMessage>;
+  }
+  if (display) return <SharedDisplay engine={engine} />;
+  return <Table engine={engine} campaignId={campaignId} sessionId={sessionId} />;
+}
+
+function FullMessage({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="grid h-full place-items-center bg-atmosphere px-4 text-center">
+      <div>
+        <h1 className="font-display text-2xl font-bold">{title}</h1>
+        <div className="mt-3 text-muted">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function ConnectionBadge() {
+  const status = useTable((s) => s.status);
+  const map = { connected: ['success', 'Connected'], connecting: ['info', 'Connecting'], reconnecting: ['accent', 'Reconnecting'], offline: ['danger', 'Offline'], loading: ['info', 'Loading'], error: ['danger', 'Error'], denied: ['danger', 'No access'] } as const;
+  const [tone, label] = map[status];
+  return (
+    <Badge tone={tone} aria-live="polite">
+      <Radio className="h-3 w-3" aria-hidden /> {label}
+    </Badge>
+  );
+}
+
+function SharedDisplay({ engine }: { engine: SyncEngine }) {
+  const camRef = useRef<{ fit: () => void; get: () => Camera; set: (c: Camera) => void } | null>(null);
+  const snap = useTable((s) => s.snapshot)!;
+  return (
+    <div className="relative h-full overflow-hidden bg-black">
+      {snap.scene ? <TabletopCanvas engine={engine} onCamera={() => undefined} cameraRef={camRef} /> : <FullMessage title={snap.campaign.title}>No scene is on the table yet.</FullMessage>}
+      <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-2 opacity-60">
+        <span className="rounded bg-black/60 px-2 py-1 text-xs">Player view · {snap.scene?.scene.name}</span>
+        <ConnectionBadge />
+      </div>
+      <button className="absolute bottom-3 right-3 rounded bg-black/60 px-2 py-1 text-xs text-muted hover:text-text" onClick={() => void document.documentElement.requestFullscreen?.()}>
+        Full screen
+      </button>
+    </div>
+  );
+}
+
+function Table({ engine, campaignId, sessionId }: { engine: SyncEngine; campaignId: string; sessionId: string }) {
+  const snap = useTable((s) => s.snapshot)!;
+  const tool = useTable((s) => s.tool);
+  const unread = useTable((s) => s.unread);
+  const showCursors = useTable((s) => s.showCursors);
+  const hideMyCursor = useTable((s) => s.hideMyCursor);
+  const followGM = useTable((s) => s.followGM);
+  const fogBrush = useTable((s) => s.fogBrush);
+  const navigate = useNavigate();
+  const isGM = snap.viewMode === 'gm';
+  const [panel, setPanel] = useState<'chat' | 'gm'>(isGM ? 'gm' : 'chat');
+  const [zoom, setZoom] = useState(1);
+  const camRef = useRef<{ fit: () => void; get: () => Camera; set: (c: Camera) => void } | null>(null);
+  const session = snap.session;
+  const meetingUrl = session.meetingUrl ?? snap.campaign.settings.meetingUrl;
+
+  // Tool keyboard shortcuts (V select, H pan, M measure, P ping, Esc select).
+  useEffect(() => {
+    const keys: Record<string, Tool> = { v: 'select', h: 'pan', m: 'measure', p: 'ping', ...(isGM ? { r: 'fog-reveal' as Tool, c: 'fog-conceal' as Tool } : {}) };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement || e.metaKey || e.ctrlKey) return;
+      if (e.key === 'Escape') setTable({ tool: 'select', selectedId: null });
+      const t = keys[e.key.toLowerCase()];
+      if (t) setTable({ tool: t });
+      if (isGM && (e.key === 'Delete' || e.key === 'Backspace')) {
+        const id = useTable.getState().selectedId;
+        if (id) {
+          void engine.command('removeSceneObject', { objectId: id }).catch((err: Error) => toast.error(err.message));
+          setTable({ selectedId: null });
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isGM, engine]);
+
+  const tools: { id: Tool; label: string; key: string; icon: typeof Hand; gm?: boolean }[] = [
+    { id: 'select', label: 'Select & move', key: 'V', icon: MousePointer2 },
+    { id: 'pan', label: 'Pan', key: 'H', icon: Hand },
+    { id: 'measure', label: 'Measure', key: 'M', icon: Ruler },
+    { id: 'ping', label: 'Ping', key: 'P', icon: Crosshair },
+    { id: 'fog-reveal', label: 'Reveal fog', key: 'R', icon: Wand2, gm: true },
+    { id: 'fog-conceal', label: 'Conceal fog', key: 'C', icon: Eraser, gm: true },
+  ];
+
+  const transition = async (action: 'start' | 'pause' | 'resume' | 'end') => {
+    try {
+      await campaignApi.transition(sessionId, action);
+      if (action === 'end') navigate(`/campaigns/${campaignId}`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+
+  const focusEveryone = () => {
+    const cam = camRef.current?.get();
+    const s = useTable.getState();
+    const r = document.querySelector('[role=application]')?.getBoundingClientRect();
+    if (!cam || !s.snapshot?.scene || !r) return;
+    const center = { x: cam.x + r.width / 2 / cam.zoom, y: cam.y + r.height / 2 / cam.zoom };
+    void engine.command('presenterFocus', { sceneId: s.snapshot.scene.scene.id, center, zoom: cam.zoom }).then(() => toast.success('Everyone is looking here'), (e: Error) => toast.error(e.message));
+  };
+
+  const statusTone = { PLANNED: 'info', LIVE: 'success', PAUSED: 'accent', ENDED: 'neutral' } as const;
+
+  return (
+    <div className="flex h-full flex-col bg-bg">
+      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-surface px-3">
+        <Link to={`/campaigns/${campaignId}`} className="rounded-md p-1.5 text-muted hover:bg-surface-2 hover:text-text" aria-label="Back to campaign">
+          <ArrowLeft className="h-4 w-4" />
+        </Link>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold">{snap.campaign.title}</p>
+          <p className="truncate text-[11px] text-faint">
+            {session.title} · {snap.scene?.scene.name ?? 'No scene'}
+          </p>
+        </div>
+        <Badge tone={statusTone[session.status]}>{session.status.toLowerCase()}</Badge>
+        <ConnectionBadge />
+        <div className="ml-auto flex items-center gap-2">
+          {isGM && session.status === 'PLANNED' && (
+            <Button size="sm" onClick={() => void transition('start')}>
+              <Play className="h-4 w-4" aria-hidden /> Start session
+            </Button>
+          )}
+          {isGM && session.status === 'LIVE' && (
+            <Button size="sm" variant="secondary" onClick={() => void transition('pause')}>
+              <Pause className="h-4 w-4" aria-hidden /> Pause
+            </Button>
+          )}
+          {isGM && session.status === 'PAUSED' && (
+            <Button size="sm" onClick={() => void transition('resume')}>
+              <Play className="h-4 w-4" aria-hidden /> Resume
+            </Button>
+          )}
+          {isGM && session.status !== 'ENDED' && (
+            <Button size="sm" variant="ghost" onClick={() => confirm('End this session? Everything is saved and can be continued next time.') && void transition('end')}>
+              <Square className="h-4 w-4" aria-hidden /> End
+            </Button>
+          )}
+          {isGM && (
+            <a href={`/campaigns/${campaignId}/sessions/${sessionId}/display`} target="_blank" rel="noopener noreferrer">
+              <Button size="sm" variant="outline" title="Open a clean player view for screen sharing">
+                <MonitorPlay className="h-4 w-4" aria-hidden /> Player display
+              </Button>
+            </a>
+          )}
+          {meetingUrl && (
+            <a href={meetingUrl} target="_blank" rel="noopener noreferrer">
+              <Button size="sm" variant="secondary">
+                <Video className="h-4 w-4" aria-hidden /> Join call
+              </Button>
+            </a>
+          )}
+        </div>
+      </header>
+
+      <div className="flex min-h-0 flex-1">
+        {isGM && <ScenesSidebar campaignId={campaignId} engine={engine} />}
+
+        <main className="relative min-w-0 flex-1 overflow-hidden">
+          {snap.waiting ? (
+            <FullMessage title="The table isn't open yet">
+              <p className="flex items-center justify-center gap-2">
+                <Hourglass className="h-4 w-4" aria-hidden /> Your GM will start the session soon. This page updates automatically.
+              </p>
+            </FullMessage>
+          ) : !snap.scene ? (
+            <FullMessage title={isGM ? 'Choose a scene' : 'Waiting for the GM'}>
+              {isGM ? 'Pick a scene from the left to put it on the table.' : 'The GM has not put a map on the table yet.'}
+            </FullMessage>
+          ) : (
+            <>
+              <TabletopCanvas engine={engine} onCamera={(c) => setZoom(c.zoom)} cameraRef={camRef} />
+              {!snap.scene.map.calibration && isGM && (
+                <div className="absolute left-1/2 top-3 -translate-x-1/2 rounded-lg border border-accent/40 bg-surface/90 px-3 py-1.5 text-xs">
+                  This map has no scale yet.{' '}
+                  <Link className="text-accent underline" to={`/campaigns/${campaignId}/maps/${snap.scene.map.id}`}>
+                    Calibrate it
+                  </Link>{' '}
+                  to enable grid and measuring.
+                </div>
+              )}
+              <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-xl border border-border bg-surface/95 p-1 shadow-xl backdrop-blur" role="toolbar" aria-label="Table tools">
+                {tools
+                  .filter((t) => !t.gm || isGM)
+                  .map((t) => (
+                    <Button key={t.id} size="icon" variant={tool === t.id ? 'secondary' : 'ghost'} aria-pressed={tool === t.id} aria-label={`${t.label} (${t.key})`} title={`${t.label} (${t.key})`} onClick={() => setTable({ tool: t.id })}>
+                      <t.icon className="h-4 w-4" aria-hidden />
+                    </Button>
+                  ))}
+                {isGM && (tool === 'fog-reveal' || tool === 'fog-conceal') && (
+                  <>
+                    <span className="mx-1 h-6 w-px bg-border" aria-hidden />
+                    <Button size="icon" variant={fogBrush === 'rect' ? 'secondary' : 'ghost'} aria-label="Rectangle fog tool" title="Rectangle" onClick={() => setTable({ fogBrush: 'rect' })}>
+                      <SquareDashed className="h-4 w-4" aria-hidden />
+                    </Button>
+                    <Button size="icon" variant={fogBrush === 'brush' ? 'secondary' : 'ghost'} aria-label="Brush fog tool" title="Brush" onClick={() => setTable({ fogBrush: 'brush' })}>
+                      <Brush className="h-4 w-4" aria-hidden />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => confirm('Reset fog for this scene?') && void engine.command('resetFog', { sceneId: snap.scene!.scene.id, initial: 'covered' }).catch((e: Error) => toast.error(e.message))}
+                    >
+                      Cover all
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => void engine.command('resetFog', { sceneId: snap.scene!.scene.id, initial: 'revealed' }).catch((e: Error) => toast.error(e.message))}
+                    >
+                      Clear all
+                    </Button>
+                  </>
+                )}
+                <span className="mx-1 h-6 w-px bg-border" aria-hidden />
+                <Button size="icon" variant="ghost" aria-label="Fit map to screen" title="Fit map" onClick={() => camRef.current?.fit()}>
+                  <Maximize className="h-4 w-4" aria-hidden />
+                </Button>
+                <span className="w-12 text-center text-xs tabular-nums text-muted">{Math.round(zoom * 100)}%</span>
+                {isGM && (
+                  <Button size="sm" variant="ghost" title="Move everyone's camera to your view" onClick={focusEveryone}>
+                    <Shield className="h-4 w-4" aria-hidden /> Focus all
+                  </Button>
+                )}
+              </div>
+              <div className="absolute right-3 top-3 flex flex-col items-end gap-1 text-xs">
+                <label className="flex items-center gap-1.5 rounded-md bg-surface/80 px-2 py-1">
+                  <input type="checkbox" className="accent-[var(--color-accent)]" checked={showCursors} onChange={(e) => setTable({ showCursors: e.target.checked })} /> Show pointers
+                </label>
+                <label className="flex items-center gap-1.5 rounded-md bg-surface/80 px-2 py-1">
+                  <input
+                    type="checkbox"
+                    className="accent-[var(--color-accent)]"
+                    checked={hideMyCursor}
+                    onChange={(e) => {
+                      setTable({ hideMyCursor: e.target.checked });
+                      if (e.target.checked) engine.leaveCursor();
+                    }}
+                  />{' '}
+                  <EyeOff className="h-3 w-3" aria-hidden /> Hide my pointer
+                </label>
+                {!isGM && (
+                  <label className="flex items-center gap-1.5 rounded-md bg-surface/80 px-2 py-1">
+                    <input type="checkbox" className="accent-[var(--color-accent)]" checked={followGM} onChange={(e) => setTable({ followGM: e.target.checked })} /> Follow GM camera
+                  </label>
+                )}
+              </div>
+            </>
+          )}
+        </main>
+
+        <aside className="flex w-80 shrink-0 flex-col border-l border-border bg-surface" aria-label="Side panel">
+          <div className="flex border-b border-border" role="tablist">
+            <button role="tab" aria-selected={panel === 'chat'} onClick={() => setPanel('chat')} className={cn('flex flex-1 items-center justify-center gap-2 py-2.5 text-sm', panel === 'chat' ? 'border-b-2 border-accent text-text' : 'text-muted')}>
+              <MessageSquare className="h-4 w-4" aria-hidden /> Chat &amp; dice
+              {unread > 0 && panel !== 'chat' && <Badge tone="accent">{unread}</Badge>}
+            </button>
+            {isGM && (
+              <button role="tab" aria-selected={panel === 'gm'} onClick={() => setPanel('gm')} className={cn('flex flex-1 items-center justify-center gap-2 py-2.5 text-sm', panel === 'gm' ? 'border-b-2 border-accent text-text' : 'text-muted')}>
+                <Shield className="h-4 w-4" aria-hidden /> GM tools
+              </button>
+            )}
+          </div>
+          <div className="min-h-0 flex-1">{panel === 'chat' || !isGM ? <ChatPanel engine={engine} /> : <GMPanel engine={engine} />}</div>
+          <Players />
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function Players() {
+  const members = useTable((s) => s.snapshot?.members ?? []);
+  const cursors = useTable((s) => s.cursors);
+  const me = useTable((s) => s.snapshot?.me.sub);
+  return (
+    <div className="border-t border-border p-3">
+      <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-faint">At the table</h3>
+      <ul className="flex flex-wrap gap-1.5">
+        {members.map((m) => {
+          const active = m.userSub === me || !!cursors[m.userSub];
+          return (
+            <li key={m.userSub} className={cn('flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs', active ? 'border-border text-text' : 'border-transparent text-faint')}>
+              <span className="h-2 w-2 rounded-full" style={{ background: m.color }} aria-hidden />
+              {m.displayName}
+              {m.role === 'OWNER' && <span className="text-[10px] text-accent">GM</span>}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function ScenesSidebar({ campaignId, engine }: { campaignId: string; engine: SyncEngine }) {
+  const { data, refetch } = useCampaign(campaignId);
+  const activeSceneId = useTable((s) => s.snapshot?.session.activeSceneId);
+  const [creatingFor, setCreatingFor] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
+  if (collapsed)
+    return (
+      <button className="w-8 border-r border-border bg-surface text-muted hover:text-text" onClick={() => setCollapsed(false)} aria-label="Show scenes">
+        <Layers className="mx-auto h-4 w-4" />
+      </button>
+    );
+  return (
+    <aside className="scrollbar-thin flex w-60 shrink-0 flex-col overflow-y-auto border-r border-border bg-surface" aria-label="Scenes">
+      <div className="flex items-center justify-between px-3 py-2.5">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted">Scenes</h2>
+        <button className="text-xs text-faint hover:text-text" onClick={() => setCollapsed(true)}>
+          Hide
+        </button>
+      </div>
+      <ul className="space-y-0.5 px-2">
+        {(data?.scenes ?? []).map((s) => (
+          <li key={s.id}>
+            <button
+              className={cn('w-full rounded-md px-2 py-1.5 text-left text-sm', s.id === activeSceneId ? 'bg-accent/15 text-accent' : 'text-text hover:bg-surface-2')}
+              onClick={() => s.id !== activeSceneId && void engine.command('switchActiveScene', { sceneId: s.id }).catch((e: Error) => toast.error(e.message))}
+              aria-current={s.id === activeSceneId}
+            >
+              {s.name}
+              {s.id === activeSceneId && <span className="ml-1 text-[10px] uppercase">live</span>}
+            </button>
+          </li>
+        ))}
+        {data?.scenes.length === 0 && <li className="px-2 text-xs text-faint">No scenes yet. Create one from a map below.</li>}
+      </ul>
+      <h2 className="mt-4 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted">Maps</h2>
+      <ul className="space-y-0.5 px-2 pb-4">
+        {(data?.maps ?? []).map((m) => (
+          <li key={m.id} className="flex items-center justify-between rounded-md px-2 py-1 text-sm hover:bg-surface-2">
+            <span className="truncate">{m.name}</span>
+            <button
+              className="rounded p-1 text-faint hover:text-accent"
+              aria-label={`New scene from ${m.name}`}
+              title="New scene from this map"
+              disabled={creatingFor === m.id}
+              onClick={async () => {
+                setCreatingFor(m.id);
+                try {
+                  const scene = await campaignApi.createScene(campaignId, { mapId: m.id, name: m.name, fogInitial: 'revealed' });
+                  await refetch();
+                  await engine.command('switchActiveScene', { sceneId: scene.id });
+                } catch (e) {
+                  toast.error((e as Error).message);
+                } finally {
+                  setCreatingFor(null);
+                }
+              }}
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </li>
+        ))}
+        <li>
+          <Link to={`/campaigns/${campaignId}`} className="block px-2 py-1 text-xs text-accent hover:underline">
+            Upload a map…
+          </Link>
+        </li>
+      </ul>
+    </aside>
+  );
+}

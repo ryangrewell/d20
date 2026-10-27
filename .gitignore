@@ -1,0 +1,11 @@
+node_modules
+dist
+.env
+.env.local
+.amplify
+amplify_outputs.json
+test-results
+playwright-report
+coverage
+*.tsbuildinfo
+.DS_Store

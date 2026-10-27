@@ -1,0 +1,7 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "api", "runtimeExecutable": "npx", "runtimeArgs": ["tsx", "watch", "--clear-screen=false", "dev/server.ts"], "port": 8787 },
+    { "name": "web", "runtimeExecutable": "npx", "runtimeArgs": ["vite", "--port", "5173", "--strictPort"], "port": 5173 }
+  ]
+}

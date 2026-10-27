@@ -1,0 +1,19 @@
+# Local stand-ins for AWS services. Never used in production.
+services:
+  dynamodb:
+    image: amazon/dynamodb-local:latest
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/data"]
+    ports: ["8000:8000"]
+    volumes: ["d20-dynamodb:/data"]
+    user: root
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    ports: ["9100:9000", "9101:9001"]
+    environment:
+      MINIO_ROOT_USER: d20local
+      MINIO_ROOT_PASSWORD: d20localsecret
+    volumes: ["d20-minio:/data"]
+volumes:
+  d20-dynamodb:
+  d20-minio:
