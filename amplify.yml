@@ -3,7 +3,7 @@ backend:
   phases:
     preBuild:
       commands:
-        - nvm install 22 && nvm use 22
+        - nvm install 24 && nvm use 24
     build:
       commands:
         - npm ci
@@ -12,7 +12,7 @@ frontend:
   phases:
     preBuild:
       commands:
-        - nvm install 22 && nvm use 22
+        - nvm install 24 && nvm use 24
         - npm ci
     build:
       commands:
