@@ -19,7 +19,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lockfile:fix": "npx -y npm@10.9.9 install --package-lock-only --ignore-scripts",
+    "lockfile:check": "npx -y npm@10.9.9 ci --dry-run --ignore-scripts && npm ci --dry-run --ignore-scripts"
   },
   "devDependencies": {
     "@aws-amplify/backend": "^1.25.1",
