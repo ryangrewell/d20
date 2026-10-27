@@ -4,7 +4,7 @@ _Last updated: 2026-10-27_
 
 ## Summary
 
-The spec's **first deliverable works locally end to end** and is covered by an automated Playwright journey. That covers sign-up/verify/sign-in, creating a campaign, issuing an invite, a player joining, uploading and calibrating a map, creating a scene and live session, GM and player views in separate browsers, moving a shared token, and seeing synchronized changes and cursors. Deployed to https://d20.ryangrewell.com via Amplify Hosting (us-east-2). Sign-in and the API are verified live; realtime still needs a multi-player check there.
+The spec's **first deliverable works locally end to end** and is covered by an automated Playwright journey. That covers sign-up/verify/sign-in, creating a campaign, issuing an invite, a player joining, uploading and calibrating a map, creating a scene and live session, GM and player views in separate browsers, moving a shared token, and seeing synchronized changes and cursors. Deployed to https://d20.ryangrewell.com via Amplify Hosting (us-east-2). Sign-in, the API and realtime (chat, tokens, pointers between two players) are verified live.
 
 ## Test results (latest run)
 
@@ -39,7 +39,7 @@ The spec's **first deliverable works locally end to end** and is covered by an a
 - [~] B08 Shared Display (player projection, no GM UI). Named-player preview exists in the API (`?as=<sub>`) but has no UI
 
 **Epic C — Realtime**
-- [~] C01 AppSync Events namespaces + Lambda handlers defined (synth OK). Live behaviour unverified
+- [x] C01 AppSync Events namespaces + Lambda handlers, verified live on d20.ryangrewell.com (2026-10-27)
 - [x] C02 Command handling, revisions, idempotency
 - [x] C03 GM / shared / per-user projections
 - [x] C04 Realtime token / scene / object updates
@@ -62,7 +62,7 @@ The spec's **first deliverable works locally end to end** and is covered by an a
 
 ## Active risks
 
-1. **AppSync Events handler contract unverified.** `amplify/functions/events/handler.ts` follows AWS docs for direct Lambda handlers but has not run against a live API. First sandbox deploy must test subscribe denial, presence re-stamping, and IAM publish.
+1. **AppSync Events denial path not yet observed live.** Two-player play on d20.ryangrewell.com confirmed authorised subscribes, IAM publish of game events and presence re-stamping. Rejection of an unauthorised subscribe (e.g. a removed member) has only been tested locally.
 2. **No outbox.** A failed publish after a committed write is only healed on the client's next resync. Planned fix: DynamoDB Streams publisher.
 3. **Map images are visible to players** (documented; `strictFog` is future work).
 4. Concurrent non-ended sessions on the same scene only notify the session that issued the command.
@@ -71,7 +71,7 @@ The spec's **first deliverable works locally end to end** and is covered by an a
 
 ## Next tasks
 
-1. Run a real multi-player session on d20.ryangrewell.com to verify AppSync Events live (subscribe checks, presence re-stamping, IAM publish).
+1. Confirm live that a removed member stops receiving updates (subscribe denial and epoch rotation on AWS).
 2. Remaining Phase 4 polish: encounter templates (groups of creatures), chat history pagination, journal/handouts.
 3. Outbox publisher; GM undo for recent reversible commands; scene checkpoints.
 4. Phase 5 interior generator; Phase 6 delegation API/UI, admin dashboard, audit.
