@@ -1,10 +1,10 @@
 # Implementation status
 
-_Last updated: 2026-10-26_
+_Last updated: 2026-10-27_
 
 ## Summary
 
-The spec's **first deliverable works locally end to end** and is covered by an automated Playwright journey. That covers sign-up/verify/sign-in, creating a campaign, issuing an invite, a player joining, uploading and calibrating a map, creating a scene and live session, GM and player views in separate browsers, moving a shared token, and seeing synchronized changes and cursors. Nothing is deployed to AWS. The Amplify backend synthesises but has never been deployed (no credentials).
+The spec's **first deliverable works locally end to end** and is covered by an automated Playwright journey. That covers sign-up/verify/sign-in, creating a campaign, issuing an invite, a player joining, uploading and calibrating a map, creating a scene and live session, GM and player views in separate browsers, moving a shared token, and seeing synchronized changes and cursors. Deployed to https://d20.ryangrewell.com via Amplify Hosting (us-east-2). Sign-in and the API are verified live; realtime still needs a multi-player check there.
 
 ## Test results (latest run)
 
@@ -12,9 +12,9 @@ The spec's **first deliverable works locally end to end** and is covered by an a
 |---|---|
 | `tsc -b` (app, server, scripts, tests) + `tsc -p amplify` | pass |
 | `eslint .` | pass |
-| Unit tests (19) | pass |
-| Integration tests vs DynamoDB Local + MinIO (16) | pass |
-| Playwright first-deliverable journey (1) | pass |
+| Unit tests (23) | pass |
+| Integration tests vs DynamoDB Local + MinIO (23) | pass |
+| Playwright journeys (2): first deliverable, gameplay | pass |
 | `vite build` | pass |
 | `cdk synth` of Amplify backend (offline) | pass |
 
@@ -49,11 +49,11 @@ The spec's **first deliverable works locally end to end** and is covered by an a
 - [x] C08 Epoch rotation on member removal + negative tests
 
 **Epic D — Gameplay** (MPO)
-- [ ] D01 Adapter contract / generic-d20 sheet
-- [ ] D02 Character sheets
-- [ ] D03 Inventory, drops, atomic pickup
-- [~] D04 Spawn hidden/visible creatures, reveal/hide, GM notes. Reusable creature/encounter templates not built
-- [ ] D05 Initiative / conditions
+- [x] D01 Declarative, versioned adapter contract + generic-d20 adapter
+- [x] D02 Character sheets: owner/GM-only, revisioned, GM edits audited, derived stats, dice buttons, JSON import/export
+- [x] D03 Inventory (qty/state/charges/tags, GM-only notes), loot piles with contents, atomic pickup (race-tested)
+- [~] D04 Creature library (HP/AC/initiative/notes) with spawn and GM-only stats/HP bars. Multi-creature encounter templates not built
+- [x] D05 Server-rolled initiative tracker (hidden combatants stripped for players, round counter, players end their own turn) + conditions on tokens and sheets
 - [x] D06 Server-side dice (kh/kl/dh/dl, limits), PUBLIC / GM / SELF, persisted log
 - [x] D07 Table chat + whispers (recipient-scoped). No pagination UI for older messages
 - [x] D08 Session lifecycle (plan/start/pause/resume/end) + Zoom/Teams link
@@ -71,8 +71,8 @@ The spec's **first deliverable works locally end to end** and is covered by an a
 
 ## Next tasks
 
-1. Deploy a personal sandbox (`npx ampx sandbox`) and verify Cognito sign-up plus AppSync Events end to end. Fix contract mismatches.
-2. Phase 4 completion: generic-d20 adapter + character sheets, inventory and atomic loot pickup, creature library, initiative tracker, chat history pagination.
+1. Run a real multi-player session on d20.ryangrewell.com to verify AppSync Events live (subscribe checks, presence re-stamping, IAM publish).
+2. Remaining Phase 4 polish: encounter templates (groups of creatures), chat history pagination, journal/handouts.
 3. Outbox publisher; GM undo for recent reversible commands; scene checkpoints.
 4. Phase 5 interior generator; Phase 6 delegation API/UI, admin dashboard, audit.
 

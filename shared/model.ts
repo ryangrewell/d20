@@ -99,6 +99,8 @@ export type GameSession = {
   accessEpoch: number;
   /** GM-only. */
   gmNotes?: string;
+  /** Combat tracker; hidden entries are stripped for players. */
+  initiative?: InitiativeState;
   createdAt: string;
   updatedAt: string;
 };
@@ -165,11 +167,93 @@ export type SceneObject = {
   allowedViewerIds?: string[];
   assignedControllerSub?: string;
   appearance: { label?: string; imageAssetId?: string; tint?: string };
+  /** Visible status effects, e.g. "Prone". */
+  conditions?: string[];
+  /** Links a PC token to its character sheet. */
+  characterId?: string;
+  /** Contents of a LOOT object that players may pick up. */
+  loot?: LootEntry[];
+  /** GM-only. */
+  gmNotes?: string;
+  /** GM-only creature stats (HP, AC, initiative) copied from a template or set ad hoc. */
+  gmStats?: CreatureStats & { templateId?: string };
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LootEntry = { id: string; name: string; description?: string; quantity: number };
+
+export type CreatureStats = { hp?: { current: number; max: number }; ac?: number; initiativeMod?: number };
+
+export type CreatureTemplate = {
+  id: string;
+  campaignId: string;
+  name: string;
+  tint: string;
+  sizeMeters?: number;
+  hpMax: number;
+  ac?: number;
+  initiativeMod: number;
+  /** Free-form stat block / tactics. GM-only. */
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Character = {
+  id: string;
+  campaignId: string;
+  /** The player who controls this character. */
+  ownerSub: string;
+  name: string;
+  systemId: string;
+  systemVersion: string;
+  /** Adapter-defined sheet data; unknown keys are preserved across upgrades. */
+  sheet: Record<string, unknown>;
+  conditions: string[];
   /** GM-only. */
   gmNotes?: string;
   revision: number;
   createdAt: string;
   updatedAt: string;
+};
+
+export type ItemState = 'EQUIPPED' | 'CARRIED' | 'STASHED';
+
+export type InventoryItem = {
+  id: string;
+  characterId: string;
+  campaignId: string;
+  name: string;
+  description: string;
+  quantity: number;
+  weight?: number;
+  tags: string[];
+  charges?: { current: number; max: number };
+  state: ItemState;
+  /** GM-only note on the item; never shown to the player. */
+  gmNote?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type InitiativeEntry = {
+  id: string;
+  label: string;
+  value: number;
+  objectId?: string;
+  characterId?: string;
+  /** Hidden from players (e.g. an unrevealed monster). */
+  hidden: boolean;
+};
+
+export type InitiativeState = {
+  active: boolean;
+  round: number;
+  /** Id of the entry whose turn it is. */
+  currentId?: string;
+  entries: InitiativeEntry[];
 };
 
 export type FogOpRecord = { sceneId: string; seq: number; op: FogOp; createdAt: string };

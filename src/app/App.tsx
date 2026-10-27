@@ -1,8 +1,8 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from '@/lib/queryClient';
 import { Toaster } from 'sonner';
-import { ApiError } from '@/lib/api/client';
 import { Spinner } from '@/components/ui/primitives';
 import { AuthProvider, RequireAuth } from './auth';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -17,16 +17,8 @@ import { LegalPage } from '@/features/home/LegalPage';
 // The tabletop and map tooling pull in PixiJS; load them on demand.
 const TabletopPage = lazy(() => import('@/features/tabletop/TabletopPage'));
 const MapSetupPage = lazy(() => import('@/features/maps/MapSetupPage'));
+const CharacterPage = lazy(() => import('@/features/characters/CharacterPage'));
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 15_000,
-      retry: (count, err) => !(err instanceof ApiError && [401, 403, 404].includes(err.status)) && count < 2,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
 
 const fallback = (
   <div className="grid h-full place-items-center">
@@ -55,6 +47,7 @@ export function App() {
                 <Route path="/account" element={<AccountPage />} />
                 <Route path="/campaigns/:campaignId" element={<CampaignPage />} />
                 <Route path="/campaigns/:campaignId/maps/:mapId" element={<MapSetupPage />} />
+                <Route path="/campaigns/:campaignId/characters/:characterId" element={<CharacterPage />} />
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

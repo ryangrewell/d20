@@ -9,6 +9,15 @@ import { FogOpSchema } from './api';
 
 const ObjectType = z.enum(['PC', 'NPC', 'CREATURE', 'LOOT', 'PROP', 'PIN']);
 const Visibility = z.enum(['GM_ONLY', 'VISIBLE_TO_ALL', 'SELECTED_PLAYERS']);
+const Conditions = z.array(plainText(40).pipe(z.string().min(1))).max(20);
+const LootEntries = z
+  .array(z.object({ id: z.string().min(1).max(40), name: plainText(80).pipe(z.string().min(1)), description: plainText(500).optional(), quantity: z.number().int().min(0).max(100000) }))
+  .max(50);
+const GmStats = z.object({
+  hp: z.object({ current: z.number().int().min(-100000).max(100000), max: z.number().int().min(0).max(100000) }).optional(),
+  ac: z.number().int().min(0).max(100).optional(),
+  initiativeMod: z.number().int().min(-50).max(50).optional(),
+});
 
 export const CommandPayloads = {
   moveToken: z.object({ objectId: Id, x: z.number().finite(), y: z.number().finite(), expectedObjectRevision: z.number().int().nonnegative().optional() }),
@@ -24,6 +33,11 @@ export const CommandPayloads = {
     allowedViewerIds: z.array(UserSub).max(50).optional(),
     assignedControllerSub: UserSub.optional(),
     gmNotes: plainText(4000).optional(),
+    /** Spawn from a creature-library template (fills label, size, colour, GM stats and notes). */
+    templateId: Id.optional(),
+    /** Link a PC token to a character sheet. */
+    characterId: Id.optional(),
+    loot: LootEntries.optional(),
   }),
   updateSceneObject: z.object({
     objectId: Id,
@@ -38,6 +52,10 @@ export const CommandPayloads = {
         allowedViewerIds: z.array(UserSub).max(50),
         assignedControllerSub: UserSub.nullable(),
         gmNotes: plainText(4000),
+        conditions: Conditions,
+        loot: LootEntries,
+        gmStats: GmStats,
+        characterId: Id.nullable(),
       })
       .partial(),
   }),
@@ -48,6 +66,19 @@ export const CommandPayloads = {
   resetFog: z.object({ sceneId: Id, initial: z.enum(['covered', 'revealed']) }),
   switchActiveScene: z.object({ sceneId: Id }),
   presenterFocus: z.object({ sceneId: Id, center: Point, zoom: z.number().positive().max(16) }),
+  /** A player (or GM) takes items from a visible loot pile into a character's inventory, atomically. */
+  pickupLoot: z.object({ objectId: Id, entryId: z.string().min(1).max(40), characterId: Id, quantity: z.number().int().min(1).max(100000) }),
+  /** Rolls initiative on the server for these tokens. Players may roll only for tokens they control. */
+  rollInitiative: z.object({ objectIds: z.array(Id).min(1).max(50) }),
+  setInitiativeEntry: z.object({
+    entryId: z.string().min(1).max(40).optional(),
+    label: plainText(60).pipe(z.string().min(1)),
+    value: z.number().int().min(-100).max(1000),
+    hidden: z.boolean().default(false),
+  }),
+  removeInitiativeEntry: z.object({ entryId: z.string().min(1).max(40) }),
+  advanceTurn: z.object({ direction: z.enum(['next', 'prev']).default('next') }),
+  endCombat: z.object({}),
   sendChat: z.object({
     body: plainText(2000).pipe(z.string().min(1, 'Message is empty')),
     /** Omit for the whole table; otherwise a whisper to these members. */

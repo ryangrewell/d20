@@ -179,7 +179,17 @@ export function TabletopCanvas({ engine, onCamera, cameraRef }: { engine: SyncEn
         const at = snapPoint(clampToMap(p));
         const t = s.spawn;
         void engine
-          .command('spawnSceneObject', { sceneId: sceneId!, objectType: t.objectType, x: at.x, y: at.y, label: t.label, tint: t.tint, visibility: t.visibility, ...(t.assignedControllerSub ? { assignedControllerSub: t.assignedControllerSub } : {}) })
+          .command('spawnSceneObject', {
+            sceneId: sceneId!,
+            objectType: t.objectType,
+            x: at.x,
+            y: at.y,
+            visibility: t.visibility,
+            ...(t.label ? { label: t.label } : {}),
+            ...(t.templateId ? { templateId: t.templateId } : { tint: t.tint }),
+            ...(t.characterId ? { characterId: t.characterId } : {}),
+            ...(t.assignedControllerSub ? { assignedControllerSub: t.assignedControllerSub } : {}),
+          })
           .catch((err: Error) => toast.error(err.message));
         return;
       }

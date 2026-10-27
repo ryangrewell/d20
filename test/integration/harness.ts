@@ -35,7 +35,7 @@ export async function createHarness() {
     },
   };
   const deps = createDeps({ config, publisher });
-  deps.log = () => undefined;
+  deps.log = process.env.D20_TEST_LOG ? deps.log : () => undefined;
   await deps.blobs.ensureLocalBucket(['*']).catch(() => undefined);
   const app = createApp(deps, createVerifier(config.auth));
   const secret = (config.auth as { secret: string }).secret;

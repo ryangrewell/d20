@@ -18,6 +18,7 @@ import {
   Radio,
   Ruler,
   Shield,
+  UserRound,
   Square,
   SquareDashed,
   Video,
@@ -33,6 +34,9 @@ import { setTable, useTable, type Tool } from './store';
 import { TabletopCanvas } from './TabletopCanvas';
 import { ChatPanel } from './panels/ChatPanel';
 import { GMPanel } from './panels/GMPanel';
+import { CharacterPanel } from './panels/CharacterPanel';
+import { InitiativeTracker } from './panels/InitiativeTracker';
+import { LootCard } from './panels/LootCard';
 
 export default function TabletopPage({ display = false }: { display?: boolean }) {
   const { campaignId = '', sessionId = '' } = useParams();
@@ -115,7 +119,7 @@ function Table({ engine, campaignId, sessionId }: { engine: SyncEngine; campaign
   const fogBrush = useTable((s) => s.fogBrush);
   const navigate = useNavigate();
   const isGM = snap.viewMode === 'gm';
-  const [panel, setPanel] = useState<'chat' | 'gm'>(isGM ? 'gm' : 'chat');
+  const [panel, setPanel] = useState<'chat' | 'character' | 'gm'>(isGM ? 'gm' : 'chat');
   const [zoom, setZoom] = useState(1);
   const camRef = useRef<{ fit: () => void; get: () => Camera; set: (c: Camera) => void } | null>(null);
   const session = snap.session;
@@ -239,6 +243,8 @@ function Table({ engine, campaignId, sessionId }: { engine: SyncEngine; campaign
           ) : (
             <>
               <TabletopCanvas engine={engine} onCamera={(c) => setZoom(c.zoom)} cameraRef={camRef} />
+              <InitiativeTracker engine={engine} />
+              <LootCard engine={engine} />
               {!snap.scene.map.calibration && isGM && (
                 <div className="absolute left-1/2 top-3 -translate-x-1/2 rounded-lg border border-accent/40 bg-surface/90 px-3 py-1.5 text-xs">
                   This map has no scale yet.{' '}
@@ -318,11 +324,14 @@ function Table({ engine, campaignId, sessionId }: { engine: SyncEngine; campaign
           )}
         </main>
 
-        <aside className="flex w-80 shrink-0 flex-col border-l border-border bg-surface" aria-label="Side panel">
+        <aside className="flex w-[22rem] shrink-0 flex-col border-l border-border bg-surface" aria-label="Side panel">
           <div className="flex border-b border-border" role="tablist">
             <button role="tab" aria-selected={panel === 'chat'} onClick={() => setPanel('chat')} className={cn('flex flex-1 items-center justify-center gap-2 py-2.5 text-sm', panel === 'chat' ? 'border-b-2 border-accent text-text' : 'text-muted')}>
-              <MessageSquare className="h-4 w-4" aria-hidden /> Chat &amp; dice
+              <MessageSquare className="h-4 w-4" aria-hidden /> Chat
               {unread > 0 && panel !== 'chat' && <Badge tone="accent">{unread}</Badge>}
+            </button>
+            <button role="tab" aria-selected={panel === 'character'} onClick={() => setPanel('character')} className={cn('flex flex-1 items-center justify-center gap-2 py-2.5 text-sm', panel === 'character' ? 'border-b-2 border-accent text-text' : 'text-muted')}>
+              <UserRound className="h-4 w-4" aria-hidden /> {isGM ? 'Sheets' : 'Character'}
             </button>
             {isGM && (
               <button role="tab" aria-selected={panel === 'gm'} onClick={() => setPanel('gm')} className={cn('flex flex-1 items-center justify-center gap-2 py-2.5 text-sm', panel === 'gm' ? 'border-b-2 border-accent text-text' : 'text-muted')}>
@@ -330,7 +339,7 @@ function Table({ engine, campaignId, sessionId }: { engine: SyncEngine; campaign
               </button>
             )}
           </div>
-          <div className="min-h-0 flex-1">{panel === 'chat' || !isGM ? <ChatPanel engine={engine} /> : <GMPanel engine={engine} />}</div>
+          <div className="min-h-0 flex-1">{panel === 'character' ? <CharacterPanel engine={engine} /> : panel === 'gm' && isGM ? <GMPanel engine={engine} /> : <ChatPanel engine={engine} />}</div>
           <Players />
         </aside>
       </div>

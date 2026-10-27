@@ -9,8 +9,8 @@
  */
 import type { FogOp, FogState } from '@shared/fog';
 import { channelPath, type ActorStamp, type DurableEvent, type DurableEventBody } from '@shared/events';
-import type { ChatMessage, GameSession, PresenterFocus, Scene, SceneObject } from '@shared/model';
-import { canViewerSeeObject, publicObject, publicScene, publicSession, SHARED_VIEWER, type Viewer } from '@shared/projection';
+import type { ChatMessage, GameSession, InitiativeState, PresenterFocus, Scene, SceneObject } from '@shared/model';
+import { canViewerSeeObject, publicInitiative, publicObject, publicScene, publicSession, SHARED_VIEWER, type Viewer } from '@shared/projection';
 
 export type Change =
   | { kind: 'object'; before?: SceneObject; after?: SceneObject; fog: FogState }
@@ -21,6 +21,8 @@ export type Change =
   | { kind: 'scene'; scene: Scene }
   | { kind: 'chat'; message: ChatMessage }
   | { kind: 'focus'; focus: PresenterFocus }
+  | { kind: 'initiative'; state: InitiativeState }
+  | { kind: 'character'; characterId: string; ownerSub: string }
   | { kind: 'access'; reason: 'epoch-rotated' | 'member-removed' };
 
 export type Audience = { kind: 'gm' } | { kind: 'shared' } | { kind: 'player'; sub: string } | { kind: 'gmPersonal'; sub: string };
@@ -81,6 +83,11 @@ export function projectChange(change: Change, a: Audience, activeSceneId: string
       return canReadMessage(change.message, a) ? [{ type: 'CHAT_MESSAGE_CREATED', message: change.message }] : [];
     case 'focus':
       return [{ type: 'PRESENTER_FOCUS', focus: change.focus }];
+    case 'initiative':
+      return [{ type: 'INITIATIVE_UPDATED', initiative: isGM ? change.state : publicInitiative(change.state) }];
+    case 'character':
+      // Sheets are private to their owner and the GM; even the id is not sent to others.
+      return isGM || (viewer.kind === 'player' && viewer.sub === change.ownerSub && a.kind === 'player') ? [{ type: 'CHARACTER_UPDATED', characterId: change.characterId }] : [];
     case 'access':
       return [{ type: 'ACCESS_CHANGED', reason: change.reason }];
   }

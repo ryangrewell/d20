@@ -3,12 +3,12 @@
  * through these functions so players never receive GM-only data.
  */
 import { isFogged, type FogState } from './fog';
-import type { GameSession, Scene, SceneObject } from './model';
+import type { GameSession, InitiativeState, Scene, SceneObject } from './model';
 
 export type Viewer = { kind: 'gm' } | { kind: 'player'; sub: string };
 
 /** Player-safe object: GM-only fields omitted entirely (not nulled). */
-export type PublicSceneObject = Omit<SceneObject, 'gmNotes' | 'allowedViewerIds'>;
+export type PublicSceneObject = Omit<SceneObject, 'gmNotes' | 'allowedViewerIds' | 'gmStats'>;
 export type PublicScene = Omit<Scene, 'gmNotes'>;
 export type PublicSession = Omit<GameSession, 'gmNotes'>;
 
@@ -25,7 +25,7 @@ export function canViewerSeeObject(obj: SceneObject, viewer: Viewer, fog: FogSta
 }
 
 export function publicObject(obj: SceneObject): PublicSceneObject {
-  const { gmNotes: _g, allowedViewerIds: _a, ...rest } = obj;
+  const { gmNotes: _g, allowedViewerIds: _a, gmStats: _s, ...rest } = obj;
   return rest;
 }
 
@@ -38,9 +38,16 @@ export function publicScene(scene: Scene): PublicScene {
   return rest;
 }
 
+/** Players see only non-hidden combatants; a hidden current turn shows as nobody's. */
+export function publicInitiative(state: InitiativeState): InitiativeState {
+  const entries = state.entries.filter((e) => !e.hidden);
+  const { currentId, ...rest } = state;
+  return { ...rest, entries, ...(currentId && entries.some((e) => e.id === currentId) ? { currentId } : {}) };
+}
+
 export function publicSession(session: GameSession): PublicSession {
-  const { gmNotes: _g, ...rest } = session;
-  return rest;
+  const { gmNotes: _g, initiative, ...rest } = session;
+  return { ...rest, ...(initiative ? { initiative: publicInitiative(initiative) } : {}) };
 }
 
 /** Shared-audience view: what any ordinary player (with no private grants) sees. */

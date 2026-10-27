@@ -5,7 +5,7 @@
  * accepts validated client publishes (cursor/ping), and the server stamps the
  * sender identity: a packet body can never claim to be someone else.
  */
-import type { ChatMessage, CursorPacket, PresenterFocus } from './model';
+import type { ChatMessage, CursorPacket, InitiativeState, PresenterFocus } from './model';
 import type { PublicScene, PublicSceneObject, PublicSession } from './projection';
 import type { FogOp } from './fog';
 
@@ -51,6 +51,9 @@ export type DurableEventBody =
   | { type: 'FOG_RESET'; sceneId: string; initial: 'covered' | 'revealed' }
   | { type: 'CHAT_MESSAGE_CREATED'; message: ChatMessage }
   | { type: 'PRESENTER_FOCUS'; focus: PresenterFocus }
+  | { type: 'INITIATIVE_UPDATED'; initiative: InitiativeState }
+  /** Only the id travels; authorised clients refetch the sheet. */
+  | { type: 'CHARACTER_UPDATED'; characterId: string }
   | { type: 'ACCESS_CHANGED'; reason: 'epoch-rotated' | 'member-removed' };
 
 /**

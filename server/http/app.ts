@@ -29,6 +29,9 @@ import * as invites from '../services/invites';
 import * as sessions from '../services/sessions';
 import * as maps from '../services/maps';
 import { executeCommand } from '../services/commands';
+import * as characters from '../services/characters';
+import * as creatures from '../services/creatures';
+import { CreateCharacterInput, CreatureInput, ImportCharacterInput, ItemInput, UpdateCharacterInput } from '@shared/schemas/characters';
 
 type Env = { Variables: { actor: Actor } };
 
@@ -144,6 +147,35 @@ export function createApp(deps: Deps, verify: TokenVerifier, extra?: (app: Hono<
   app.patch('/campaigns/:cid/maps/:mid', async (c) => c.json(await maps.updateMap(deps, c.get('actor'), id(c, 'cid'), id(c, 'mid'), await body(c, UpdateMapInput))));
   app.post('/campaigns/:cid/scenes', async (c) => c.json(await maps.createScene(deps, c.get('actor'), id(c, 'cid'), await body(c, CreateSceneInput)), 201));
   app.patch('/campaigns/:cid/scenes/:scid', async (c) => c.json(await maps.updateScene(deps, c.get('actor'), id(c, 'cid'), id(c, 'scid'), await body(c, UpdateSceneInput))));
+
+  // ------------------------------------------------- characters/inventory
+  app.get('/campaigns/:cid/characters', async (c) => c.json(await characters.listCharacters(deps, c.get('actor'), id(c, 'cid'))));
+  app.post('/campaigns/:cid/characters', async (c) => c.json(await characters.createCharacter(deps, c.get('actor'), id(c, 'cid'), await body(c, CreateCharacterInput)), 201));
+  app.post('/campaigns/:cid/characters/import', async (c) => c.json(await characters.importCharacter(deps, c.get('actor'), id(c, 'cid'), await body(c, ImportCharacterInput)), 201));
+  app.get('/campaigns/:cid/characters/:chid', async (c) => c.json(await characters.getCharacter(deps, c.get('actor'), id(c, 'cid'), id(c, 'chid'))));
+  app.patch('/campaigns/:cid/characters/:chid', async (c) => c.json(await characters.updateCharacter(deps, c.get('actor'), id(c, 'cid'), id(c, 'chid'), await body(c, UpdateCharacterInput))));
+  app.delete('/campaigns/:cid/characters/:chid', async (c) => {
+    await characters.deleteCharacter(deps, c.get('actor'), id(c, 'cid'), id(c, 'chid'));
+    return c.json({ ok: true });
+  });
+  app.get('/campaigns/:cid/characters/:chid/export', async (c) => c.json(await characters.exportCharacter(deps, c.get('actor'), id(c, 'cid'), id(c, 'chid'))));
+  app.post('/campaigns/:cid/characters/:chid/items', async (c) => c.json(await characters.addItem(deps, c.get('actor'), id(c, 'cid'), id(c, 'chid'), await body(c, ItemInput)), 201));
+  app.patch('/campaigns/:cid/characters/:chid/items/:iid', async (c) =>
+    c.json(await characters.updateItem(deps, c.get('actor'), id(c, 'cid'), id(c, 'chid'), id(c, 'iid'), await body(c, ItemInput.partial()))),
+  );
+  app.delete('/campaigns/:cid/characters/:chid/items/:iid', async (c) => {
+    await characters.deleteItem(deps, c.get('actor'), id(c, 'cid'), id(c, 'chid'), id(c, 'iid'));
+    return c.json({ ok: true });
+  });
+
+  // ------------------------------------------------------- creature library
+  app.get('/campaigns/:cid/creatures', async (c) => c.json(await creatures.listCreatures(deps, c.get('actor'), id(c, 'cid'))));
+  app.post('/campaigns/:cid/creatures', async (c) => c.json(await creatures.createCreature(deps, c.get('actor'), id(c, 'cid'), await body(c, CreatureInput)), 201));
+  app.patch('/campaigns/:cid/creatures/:crid', async (c) => c.json(await creatures.updateCreature(deps, c.get('actor'), id(c, 'cid'), id(c, 'crid'), await body(c, CreatureInput))));
+  app.delete('/campaigns/:cid/creatures/:crid', async (c) => {
+    await creatures.deleteCreature(deps, c.get('actor'), id(c, 'cid'), id(c, 'crid'));
+    return c.json({ ok: true });
+  });
 
   app.notFound((c) => c.json({ error: { code: 'NOT_FOUND', message: 'Not found.' } }, 404));
   return app;

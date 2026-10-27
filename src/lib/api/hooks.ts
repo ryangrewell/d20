@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CampaignDashboardDto, CampaignListItem, InviteDto, InvitePreviewDto, MeDto } from '@shared/dto';
-import type { Campaign, GameSession, MapDefinition, Scene } from '@shared/model';
+import type { Campaign, Character, CreatureTemplate, GameSession, InventoryItem, MapDefinition, Scene } from '@shared/model';
 import { api } from './client';
 
 export const qk = {
@@ -9,6 +9,34 @@ export const qk = {
   campaign: (id: string) => ['campaign', id] as const,
   invites: (id: string) => ['invites', id] as const,
   map: (cid: string, mid: string) => ['map', cid, mid] as const,
+  characters: (cid: string) => ['characters', cid] as const,
+  character: (cid: string, id: string) => ['character', cid, id] as const,
+  creatures: (cid: string) => ['creatures', cid] as const,
+};
+
+export type CharacterList = { characters: Character[]; others: { id: string; name: string; ownerSub: string }[]; system: { id: string; version: string } };
+export type CharacterDetail = { character: Character; items: InventoryItem[]; derived: Record<string, number | string>; canEdit: boolean };
+
+export const useCharacters = (cid: string, enabled = true) => useQuery({ queryKey: qk.characters(cid), queryFn: () => api<CharacterList>(`/campaigns/${cid}/characters`), enabled: enabled && !!cid });
+export const useCharacter = (cid: string, id: string | undefined) =>
+  useQuery({ queryKey: qk.character(cid, id ?? ''), queryFn: () => api<CharacterDetail>(`/campaigns/${cid}/characters/${id}`), enabled: !!cid && !!id });
+export const useCreatures = (cid: string, enabled = true) => useQuery({ queryKey: qk.creatures(cid), queryFn: () => api<CreatureTemplate[]>(`/campaigns/${cid}/creatures`), enabled: enabled && !!cid });
+
+export const characterApi = {
+  create: (cid: string, input: { name: string; ownerSub?: string }) => api<Character>(`/campaigns/${cid}/characters`, { body: input }),
+  import: (cid: string, data: unknown, ownerSub?: string) => api<Character>(`/campaigns/${cid}/characters/import`, { body: { data, ...(ownerSub ? { ownerSub } : {}) } }),
+  update: (cid: string, id: string, input: Record<string, unknown>) => api<Character>(`/campaigns/${cid}/characters/${id}`, { method: 'PATCH', body: input }),
+  remove: (cid: string, id: string) => api(`/campaigns/${cid}/characters/${id}`, { method: 'DELETE' }),
+  export: (cid: string, id: string) => api<Record<string, unknown>>(`/campaigns/${cid}/characters/${id}/export`),
+  addItem: (cid: string, id: string, input: Record<string, unknown>) => api<InventoryItem>(`/campaigns/${cid}/characters/${id}/items`, { body: input }),
+  updateItem: (cid: string, id: string, itemId: string, input: Record<string, unknown>) => api<InventoryItem>(`/campaigns/${cid}/characters/${id}/items/${itemId}`, { method: 'PATCH', body: input }),
+  removeItem: (cid: string, id: string, itemId: string) => api(`/campaigns/${cid}/characters/${id}/items/${itemId}`, { method: 'DELETE' }),
+};
+
+export const creatureApi = {
+  create: (cid: string, input: Record<string, unknown>) => api<CreatureTemplate>(`/campaigns/${cid}/creatures`, { body: input }),
+  update: (cid: string, id: string, input: Record<string, unknown>) => api<CreatureTemplate>(`/campaigns/${cid}/creatures/${id}`, { method: 'PATCH', body: input }),
+  remove: (cid: string, id: string) => api(`/campaigns/${cid}/creatures/${id}`, { method: 'DELETE' }),
 };
 
 export const useMe = () => useQuery({ queryKey: qk.me, queryFn: () => api<MeDto>('/me') });

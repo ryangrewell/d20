@@ -13,7 +13,17 @@ export type FogBrush = 'rect' | 'brush';
 export type RemoteCursor = { sub: string; name: string; color: string; nx: number; ny: number; sceneId: string; at: number };
 export type Ping = { id: number; x: number; y: number; color: string; at: number };
 
-export type SpawnTemplate = { objectType: SceneObject['objectType']; label: string; tint: string; visibility: SceneObject['visibility']; assignedControllerSub?: string };
+export type SpawnTemplate = {
+  objectType: SceneObject['objectType'];
+  label: string;
+  tint: string;
+  visibility: SceneObject['visibility'];
+  assignedControllerSub?: string;
+  /** Creature-library template to copy stats from. */
+  templateId?: string;
+  /** Character sheet to link a PC token to. */
+  characterId?: string;
+};
 
 export type TableState = {
   snapshot: SessionSnapshotDto | null;

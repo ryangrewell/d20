@@ -13,6 +13,7 @@ import type { CommandResult, CommandType, CommandInput } from '@shared/schemas/c
 import type { CursorPacket } from '@shared/model';
 import { api, ApiError } from '@/lib/api/client';
 import { createTransport, SubscribeDenied, type RealtimeTransport } from '@/lib/realtime/transport';
+import { queryClient } from '@/lib/queryClient';
 import { getTable, initialTableState, setTable, type TableObject } from './store';
 
 const CURSOR_TTL_MS = 8000;
@@ -197,6 +198,17 @@ export class SyncEngine {
       case 'PRESENTER_FOCUS':
         if (item.focus.sceneId === sceneId) setTable({ focus: { ...item.focus.center, zoom: item.focus.zoom, at: Date.now() } });
         return;
+      case 'INITIATIVE_UPDATED':
+        if (s.snapshot) setTable({ snapshot: { ...s.snapshot, session: { ...s.snapshot.session, initiative: item.initiative } } });
+        return;
+      case 'CHARACTER_UPDATED': {
+        const cid = s.snapshot?.campaign.id;
+        if (cid) {
+          void queryClient.invalidateQueries({ queryKey: ['character', cid, item.characterId] });
+          void queryClient.invalidateQueries({ queryKey: ['characters', cid] });
+        }
+        return;
+      }
       case 'ACCESS_CHANGED':
         void this.resync('access');
         return;

@@ -205,7 +205,8 @@ export class TabletopRenderer {
       keep.add(o.id);
       const r = this.tokenRadius(o);
       const hidden = o.visibility !== 'VISIBLE_TO_ALL';
-      const key = [r, o.appearance.tint, o.appearance.label, o.objectType, o.visibility, ctx.selectedId === o.id, o.assignedControllerSub === ctx.mySub].join('|');
+      const hp = 'gmStats' in o ? o.gmStats?.hp : undefined;
+      const key = [r, o.appearance.tint, o.appearance.label, o.objectType, o.visibility, ctx.selectedId === o.id, o.assignedControllerSub === ctx.mySub, o.conditions?.join(','), hp ? `${hp.current}/${hp.max}` : ''].join('|');
       let view = this.tokenViews.get(o.id);
       if (!view) {
         const root = new Container();
@@ -233,7 +234,17 @@ export class TabletopRenderer {
         if (ctx.selectedId === o.id) d.circle(0, 0, r + lw * 2.2).stroke({ width: lw, color: 0xffffff, alpha: 0.9 });
         if (o.assignedControllerSub === ctx.mySub) d.circle(0, 0, r * 0.22).fill({ color: 0xffffff, alpha: 0.9 });
         if (hidden) d.moveTo(-r * 0.7, -r * 0.7).lineTo(r * 0.7, r * 0.7).stroke({ width: lw, color: 0xffffff, alpha: 0.7 });
-        view.label.text = (o.appearance.label ?? '') + (o.visibility === 'GM_ONLY' ? ' (hidden)' : o.visibility === 'SELECTED_PLAYERS' ? ' (some)' : '');
+        // GM-only HP bar (only GMs receive gmStats).
+        if (hp && hp.max > 0) {
+          const frac = Math.max(0, Math.min(1, hp.current / hp.max));
+          const w = r * 1.8;
+          const bh = Math.max(2, r * 0.18);
+          d.rect(-w / 2, -r - bh * 2.2, w, bh).fill({ color: 0x000000, alpha: 0.7 });
+          d.rect(-w / 2, -r - bh * 2.2, w * frac, bh).fill({ color: frac > 0.5 ? 0x46a758 : frac > 0.25 ? 0xf3a712 : 0xe5484d });
+        }
+        const suffix = o.visibility === 'GM_ONLY' ? ' (hidden)' : o.visibility === 'SELECTED_PLAYERS' ? ' (some)' : '';
+        const conditions = o.conditions?.length ? `\n${o.conditions.join(' · ')}` : '';
+        view.label.text = (o.appearance.label ?? '') + suffix + conditions;
         view.label.position.set(0, r + 3);
       }
       view.root.position.set(o.x, o.y);

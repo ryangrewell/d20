@@ -18,18 +18,22 @@ import { commit, type TransactItem } from './commit';
 import { loadFog, loadSceneObjects } from './sessions';
 import { rateLimit } from './rateLimit';
 import { listMembers } from './campaigns';
+import { loadCreature } from './creatures';
+import { loadCharacter } from './characters';
+import { initiativeHandlers } from './initiative';
+import { pickupLoot } from './loot';
 
-type HandlerCtx = { deps: Deps; actor: Actor; session: GameSession; campaign: CampaignContext };
-type HandlerOutput = { changes: Change[]; writes: TransactItem[]; result?: unknown; projectionSession?: GameSession };
-type Handler<T extends CommandType> = (ctx: HandlerCtx, payload: CommandPayload<T>) => Promise<HandlerOutput>;
+export type HandlerCtx = { deps: Deps; actor: Actor; session: GameSession; campaign: CampaignContext };
+export type HandlerOutput = { changes: Change[]; writes: TransactItem[]; result?: unknown; projectionSession?: GameSession };
+export type Handler<T extends CommandType> = (ctx: HandlerCtx, payload: CommandPayload<T>) => Promise<HandlerOutput>;
 
 const MAX_OBJECTS_PER_SCENE = 500;
 
-function requireGM(ctx: HandlerCtx) {
+export function requireGM(ctx: HandlerCtx) {
   if (!ctx.campaign.access.isGM) throw forbidden('Only the GM can do that.');
 }
 
-function requirePlayable(ctx: HandlerCtx) {
+export function requirePlayable(ctx: HandlerCtx) {
   if (ctx.campaign.access.isGM) {
     if (ctx.session.status === 'ENDED') throw conflict('This session has ended.');
     return;
@@ -44,7 +48,7 @@ async function loadSceneFor(ctx: HandlerCtx, sceneId: string): Promise<Scene> {
   return scene;
 }
 
-async function loadObjectFor(ctx: HandlerCtx, objectId: string, sceneHint?: string): Promise<{ obj: SceneObject; scene: Scene; fog: FogState }> {
+export async function loadObjectFor(ctx: HandlerCtx, objectId: string, sceneHint?: string): Promise<{ obj: SceneObject; scene: Scene; fog: FogState }> {
   // Objects are keyed by scene; players can only address the active scene.
   const sceneId = sceneHint ?? ctx.session.activeSceneId;
   if (!sceneId) throw notFound('Token');
@@ -56,7 +60,7 @@ async function loadObjectFor(ctx: HandlerCtx, objectId: string, sceneHint?: stri
   return { obj, scene, fog };
 }
 
-function objectItem(o: SceneObject) {
+export function objectItem(o: SceneObject) {
   return { ...keys.object(o.sceneId, o.id), GSI1PK: `OBJ#${o.id}`, GSI1SK: 'OBJ', entity: 'SceneObject', ...o };
 }
 
@@ -67,6 +71,8 @@ async function clampToMap(ctx: HandlerCtx, scene: Scene, x: number, y: number) {
 }
 
 const handlers: { [K in CommandType]: Handler<K> } = {
+  ...initiativeHandlers,
+  pickupLoot,
   async moveToken(ctx, p) {
     requirePlayable(ctx);
     const sceneId = ctx.campaign.access.isGM ? await findObjectScene(ctx, p.objectId) : undefined;
@@ -102,9 +108,18 @@ const handlers: { [K in CommandType]: Handler<K> } = {
     const existing = await loadSceneObjects(ctx.deps, scene.id);
     if (existing.length >= MAX_OBJECTS_PER_SCENE) throw invalid(`A scene can hold at most ${MAX_OBJECTS_PER_SCENE} objects.`);
     if (p.assignedControllerSub) await requireMember(ctx, p.assignedControllerSub);
+    const template = p.templateId ? await loadCreature(ctx.deps, scene.campaignId, p.templateId) : null;
+    if (p.templateId && !template) throw notFound('Creature');
+    const character = p.characterId ? await loadCharacter(ctx.deps, scene.campaignId, p.characterId) : null;
+    if (p.characterId && !character) throw notFound('Character');
     const { fog } = await loadFog(ctx.deps, scene);
     const pos = await clampToMap(ctx, scene, p.x, p.y);
     const now = ctx.deps.now().toISOString();
+    const label = p.label ?? template?.name ?? character?.name;
+    const tint = p.tint ?? template?.tint;
+    const sizeMeters = p.sizeMeters ?? template?.sizeMeters;
+    const controller = p.assignedControllerSub ?? character?.ownerSub;
+    const gmNotes = p.gmNotes ?? template?.notes;
     const obj: SceneObject = {
       id: ulid(),
       sceneId: scene.id,
@@ -114,14 +129,17 @@ const handlers: { [K in CommandType]: Handler<K> } = {
       rotationRadians: 0,
       zIndex: existing.reduce((m, o) => Math.max(m, o.zIndex), 0) + 1,
       visibility: p.visibility,
-      appearance: { ...(p.label ? { label: p.label } : {}), ...(p.tint ? { tint: p.tint } : {}) },
+      appearance: { ...(label ? { label } : {}), ...(tint ? { tint } : {}) },
       revision: 1,
       createdAt: now,
       updatedAt: now,
-      ...(p.sizeMeters ? { sizeMeters: p.sizeMeters } : {}),
+      ...(sizeMeters ? { sizeMeters } : {}),
       ...(p.allowedViewerIds?.length ? { allowedViewerIds: p.allowedViewerIds } : {}),
-      ...(p.assignedControllerSub ? { assignedControllerSub: p.assignedControllerSub } : {}),
-      ...(p.gmNotes ? { gmNotes: p.gmNotes } : {}),
+      ...(controller ? { assignedControllerSub: controller } : {}),
+      ...(gmNotes ? { gmNotes } : {}),
+      ...(character ? { characterId: character.id } : {}),
+      ...(p.loot?.length ? { loot: p.loot } : {}),
+      ...(template ? { gmStats: { hp: { current: template.hpMax, max: template.hpMax }, ...(template.ac !== undefined ? { ac: template.ac } : {}), initiativeMod: template.initiativeMod, templateId: template.id } } : {}),
     };
     return { changes: [{ kind: 'object', after: obj, fog }], writes: [{ Put: { Item: objectItem(obj), ConditionExpression: 'attribute_not_exists(PK)' } }], result: { objectId: obj.id } };
   },
@@ -132,8 +150,15 @@ const handlers: { [K in CommandType]: Handler<K> } = {
     const { obj, fog } = await loadObjectFor(ctx, p.objectId, await findObjectScene(ctx, p.objectId));
     if (p.patch.assignedControllerSub) await requireMember(ctx, p.patch.assignedControllerSub);
     const after: SceneObject = { ...obj, revision: obj.revision + 1, updatedAt: ctx.deps.now().toISOString() };
-    const { label, tint, assignedControllerSub, allowedViewerIds, ...rest } = p.patch;
+    const { label, tint, assignedControllerSub, allowedViewerIds, characterId, gmStats, conditions, ...rest } = p.patch;
     Object.assign(after, rest);
+    if (conditions) after.conditions = [...new Set(conditions)];
+    if (gmStats) after.gmStats = { ...obj.gmStats, ...gmStats };
+    if (characterId === null) delete after.characterId;
+    else if (characterId) {
+      if (!(await loadCharacter(ctx.deps, obj.campaignId, characterId))) throw notFound('Character');
+      after.characterId = characterId;
+    }
     if (label !== undefined || tint !== undefined) after.appearance = { ...obj.appearance, ...(label !== undefined ? { label } : {}), ...(tint !== undefined ? { tint } : {}) };
     if (assignedControllerSub === null) delete after.assignedControllerSub;
     else if (assignedControllerSub) after.assignedControllerSub = assignedControllerSub;
@@ -299,7 +324,7 @@ const handlers: { [K in CommandType]: Handler<K> } = {
   },
 };
 
-function baseMessage(ctx: HandlerCtx, body: string, kind: ChatMessage['kind']): ChatMessage {
+export function baseMessage(ctx: HandlerCtx, body: string, kind: ChatMessage['kind']): ChatMessage {
   return {
     id: ulid(),
     campaignId: ctx.session.campaignId,
@@ -313,7 +338,7 @@ function baseMessage(ctx: HandlerCtx, body: string, kind: ChatMessage['kind']): 
   };
 }
 
-function chatItem(m: ChatMessage) {
+export function chatItem(m: ChatMessage) {
   return { ...keys.chat(m.campaignId, m.id), entity: 'Chat', ...m };
 }
 
@@ -323,7 +348,7 @@ async function requireMember(ctx: HandlerCtx, sub: string) {
 }
 
 /** GMs may address objects on any scene of the campaign; find it via the active scene first. */
-async function findObjectScene(ctx: HandlerCtx, objectId: string): Promise<string | undefined> {
+export async function findObjectScene(ctx: HandlerCtx, objectId: string): Promise<string | undefined> {
   if (ctx.session.activeSceneId) {
     const o = await ctx.deps.db.get<SceneObject>(keys.object(ctx.session.activeSceneId, objectId));
     if (o) return o.sceneId;

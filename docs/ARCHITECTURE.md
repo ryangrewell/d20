@@ -55,10 +55,15 @@ Channel paths include `accessEpoch`. Removing a member (and, later, revoking a d
 | Scene | `SCENE#id` | `META` | `CAMP#id` / `SCENE#id` |
 | Scene object | `SCENE#id` | `OBJ#id` | `OBJ#id` / `OBJ` |
 | Fog op | `SCENE#id` | `FOG#seq` | |
+| Character | `CAMP#id` | `CHAR#id` | |
+| Inventory item / GM-edit audit | `CHAR#id` | `ITEM#id` / `AUDIT#ulid` | |
+| Creature template | `CAMP#id` | `CREATURE#id` | |
 | Chat / roll | `CHAT#campaignId` | `MSG#ulid` | |
 | Rate window | `RATE#bucket` | `W#window` (TTL) | |
 
-No query scans across campaigns. Conditional writes and transactions cover invite redemption, object revisions, fog sequence, and command idempotency.
+No query scans across campaigns. Conditional writes and transactions cover invite redemption, object revisions (including loot pickup), character revisions, initiative version, fog sequence, and command idempotency.
+
+Initiative lives on the session item. Character sheets are campaign-level and private to owner + GM; changes publish an id-only `CHARACTER_UPDATED` to the owner's and GM's channels, and clients refetch.
 
 ## Frontend
 

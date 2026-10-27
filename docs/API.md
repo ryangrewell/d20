@@ -22,6 +22,12 @@ All routes are under `/api`. They need `Authorization: Bearer <Cognito ID token>
 | POST | `/campaigns/:cid/maps` | GM; finalize: sniff signature/dimensions, create map |
 | GET/PATCH | `/campaigns/:cid/maps/:mid` | GM; calibration + grid |
 | POST/PATCH | `/campaigns/:cid/scenes[/:scid]` | GM |
+| GET/POST | `/campaigns/:cid/characters` | List (own sheets in full, others by name only; GM sees all) / create (GM may set `ownerSub`) |
+| POST | `/campaigns/:cid/characters/import` | `{ data: <d20.character v1 export>, ownerSub? }` |
+| GET/PATCH/DELETE | `/campaigns/:cid/characters/:chid` | Owner or GM. PATCH needs `expectedRevision`; `gmNotes`/`ownerSub` GM-only; GM edits are audited |
+| GET | `/campaigns/:cid/characters/:chid/export` | Platform JSON (`format: d20.character`, `version: 1`) without GM notes |
+| POST/PATCH/DELETE | `/campaigns/:cid/characters/:chid/items[/:iid]` | Inventory; owner or GM; `gmNote` GM-only |
+| GET/POST/PATCH/DELETE | `/campaigns/:cid/creatures[/:crid]` | GM-only creature library |
 
 ## Commands
 
@@ -33,14 +39,19 @@ All routes are under `/api`. They need `Authorization: Bearer <Cognito ID token>
 | Type | Who | Payload |
 |---|---|---|
 | `moveToken` | GM, or the token's controller | `objectId, x, y, expectedObjectRevision?` |
-| `spawnSceneObject` | GM | `sceneId, objectType, x, y, label?, tint?, sizeMeters?, visibility, allowedViewerIds?, assignedControllerSub?, gmNotes?` |
-| `updateSceneObject` | GM | `objectId, patch{…}` |
+| `spawnSceneObject` | GM | `sceneId, objectType, x, y, label?, tint?, sizeMeters?, visibility, allowedViewerIds?, assignedControllerSub?, gmNotes?, templateId?, characterId?, loot?` |
+| `updateSceneObject` | GM | `objectId, patch{ label, tint, …, conditions, loot, gmStats, characterId }` |
 | `removeSceneObject` | GM | `objectId` |
 | `transferSceneObject` | GM | `objectId, targetSceneId, x?, y?` (defaults to the target map's centre; keeps id, controller, appearance) |
 | `updateFog` | GM | `sceneId, op{ mode, shape: rect\|polygon\|brush }` |
 | `resetFog` | GM | `sceneId, initial` |
 | `switchActiveScene` | GM | `sceneId` |
 | `presenterFocus` | GM | `sceneId, center, zoom` |
+| `pickupLoot` | member (own character) or GM | `objectId, entryId, characterId, quantity`; atomic, one winner per item |
+| `rollInitiative` | GM, or a player for their own tokens | `objectIds[]`; server rolls 1d20 + modifier from sheet or creature stats |
+| `setInitiativeEntry` / `removeInitiativeEntry` | GM | manual combatants |
+| `advanceTurn` | GM, or the player whose turn it is (`next` only) | `direction: next\|prev` |
+| `endCombat` | GM | `{}` |
 | `sendChat` | member | `body, recipientSubs?` (whisper) |
 | `rollDice` | member | `expression, label?, visibility: PUBLIC\|GM\|SELF` |
 
