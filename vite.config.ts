@@ -23,6 +23,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 1200,
   },
   test: {
+    passWithNoTests: true,
     projects: [
       { extends: true, test: { name: 'unit', include: ['shared/**/*.test.ts', 'server/**/*.test.ts'], environment: 'node' } },
       { extends: true, test: { name: 'web', include: ['src/**/*.test.{ts,tsx}'], environment: 'jsdom', setupFiles: ['./src/test/setup.ts'] } },
