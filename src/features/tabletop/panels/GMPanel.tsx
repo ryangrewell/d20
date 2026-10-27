@@ -184,6 +184,7 @@ function Inspector({ obj, engine, players }: { obj: SceneObject; engine: SyncEng
       <Conditions value={obj.conditions ?? []} options={getAdapter(useTable.getState().snapshot?.campaign.systemId ?? 'generic-d20').conditionDefinitions} editable onChange={(conditions) => void update({ conditions })} />
       {(obj.gmStats?.hp || obj.objectType === 'CREATURE' || obj.objectType === 'NPC') && <HitPoints obj={obj} update={update} />}
       {obj.objectType === 'LOOT' && <LootEditor obj={obj} update={update} />}
+      {obj.objectType === 'PIN' && <PortalEditor obj={obj} engine={engine} update={update} />}
       <MoveToScene obj={obj} engine={engine} />
       <Field label="Controlled by" htmlFor="objCtrl">
         <Select id="objCtrl" className="h-8 text-xs" value={obj.assignedControllerSub ?? ''} onChange={(e) => void update({ assignedControllerSub: e.target.value || null })}>
@@ -339,6 +340,32 @@ function LootEditor({ obj, update }: { obj: SceneObject; update: (patch: Record<
           <Plus className="h-4 w-4" />
         </Button>
       </form>
+    </div>
+  );
+}
+
+function PortalEditor({ obj, engine, update }: { obj: SceneObject; engine: SyncEngine; update: (patch: Record<string, unknown>) => unknown }) {
+  const campaignId = useTable((s) => s.snapshot?.campaign.id ?? '');
+  const { data } = useCampaign(campaignId);
+  const scenes = (data?.scenes ?? []).filter((s) => s.id !== obj.sceneId);
+  const target = obj.portal?.targetSceneId;
+  return (
+    <div className="space-y-1.5">
+      <Field label="Links to scene" htmlFor="objPortal" hint="Doorways and stairs: jump the table to another scene.">
+        <Select id="objPortal" className="h-8 text-xs" value={target ?? ''} onChange={(e) => void update({ portal: e.target.value ? { targetSceneId: e.target.value } : null })}>
+          <option value="">Not a link</option>
+          {scenes.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      {target && (
+        <Button size="sm" className="w-full justify-center" onClick={() => void engine.command('switchActiveScene', { sceneId: target }).catch((e: Error) => toast.error(e.message))}>
+          Go there with everyone
+        </Button>
+      )}
     </div>
   );
 }

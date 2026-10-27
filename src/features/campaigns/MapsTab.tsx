@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ImagePlus, Layers, Ruler, Upload } from 'lucide-react';
+import { Hammer, ImagePlus, Layers, Ruler, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import type { CampaignDashboardDto } from '@shared/dto';
 import { MAP_CATEGORIES } from '@shared/schemas/api';
@@ -21,9 +21,16 @@ export function MapsTab({ data }: { data: CampaignDashboardDto }) {
       <section>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="font-display text-lg font-semibold">Maps</h2>
-          <Button onClick={() => setUploading(true)}>
-            <Upload className="h-4 w-4" aria-hidden /> Upload map
-          </Button>
+          <div className="flex gap-2">
+            <Link to={`/campaigns/${campaign.id}/generator`}>
+              <Button variant="outline">
+                <Hammer className="h-4 w-4" aria-hidden /> Generate interior
+              </Button>
+            </Link>
+            <Button onClick={() => setUploading(true)}>
+              <Upload className="h-4 w-4" aria-hidden /> Upload map
+            </Button>
+          </div>
         </div>
         {maps.length === 0 ? (
           <EmptyState icon={<ImagePlus className="h-8 w-8" />} title="Upload your first map" action={<Button onClick={() => setUploading(true)}>Upload map</Button>}>

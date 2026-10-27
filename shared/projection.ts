@@ -8,7 +8,7 @@ import type { GameSession, InitiativeState, Scene, SceneObject } from './model';
 export type Viewer = { kind: 'gm' } | { kind: 'player'; sub: string };
 
 /** Player-safe object: GM-only fields omitted entirely (not nulled). */
-export type PublicSceneObject = Omit<SceneObject, 'gmNotes' | 'allowedViewerIds' | 'gmStats'>;
+export type PublicSceneObject = Omit<SceneObject, 'gmNotes' | 'allowedViewerIds' | 'gmStats' | 'portal'>;
 export type PublicScene = Omit<Scene, 'gmNotes'>;
 export type PublicSession = Omit<GameSession, 'gmNotes'>;
 
@@ -25,7 +25,7 @@ export function canViewerSeeObject(obj: SceneObject, viewer: Viewer, fog: FogSta
 }
 
 export function publicObject(obj: SceneObject): PublicSceneObject {
-  const { gmNotes: _g, allowedViewerIds: _a, gmStats: _s, ...rest } = obj;
+  const { gmNotes: _g, allowedViewerIds: _a, gmStats: _s, portal: _p, ...rest } = obj;
   return rest;
 }
 

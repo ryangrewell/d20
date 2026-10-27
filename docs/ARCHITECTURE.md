@@ -61,6 +61,7 @@ Channel paths include `accessEpoch`. Removing a member (and, later, revoking a d
 | Inventory item / GM-edit audit | `CHAR#id` | `ITEM#id` / `AUDIT#ulid` | |
 | Creature / encounter template | `CAMP#id` | `CREATURE#id` / `ENCOUNTER#id` | |
 | Journal entry | `CAMP#id` | `JOURNAL#id` | |
+| Generated floorplan | `CAMP#id` | `FLOORPLAN#id` (input + seed, names, floor→map/scene) | |
 | Chat / roll | `CHAT#campaignId` | `MSG#ulid` | |
 | Rate window | `RATE#bucket` | `W#window` (TTL) | |
 

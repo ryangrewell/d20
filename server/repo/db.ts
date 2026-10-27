@@ -41,6 +41,7 @@ export const keys = {
   encounter: (campaignId: string, id: string) => ({ PK: `CAMP#${campaignId}`, SK: `ENCOUNTER#${id}` }),
   undo: (sessionId: string, id: string) => ({ PK: `SESSION#${sessionId}`, SK: `UNDO#${id}` }),
   checkpoint: (sceneId: string, id: string) => ({ PK: `SCENE#${sceneId}`, SK: `CHECKPOINT#${id}` }),
+  floorplan: (campaignId: string, id: string) => ({ PK: `CAMP#${campaignId}`, SK: `FLOORPLAN#${id}` }),
   journal: (campaignId: string, id: string) => ({ PK: `CAMP#${campaignId}`, SK: `JOURNAL#${id}` }),
   creature: (campaignId: string, id: string) => ({ PK: `CAMP#${campaignId}`, SK: `CREATURE#${id}` }),
   chat: (campaignId: string, id: string) => ({ PK: `CHAT#${campaignId}`, SK: `MSG#${id}` }),

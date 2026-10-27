@@ -409,6 +409,16 @@ function ScenesSidebar({ campaignId, engine }: { campaignId: string; engine: Syn
   const [collapsed, setCollapsed] = useState(false);
   const [checkpointsOpen, setCheckpointsOpen] = useState(false);
   const activeScene = data?.scenes.find((s) => s.id === activeSceneId);
+  // Local breadcrumb so the GM can hop back after following a doorway or stairs.
+  const [history, setHistory] = useState<string[]>([]);
+  const lastScene = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const prev = lastScene.current;
+    lastScene.current = activeSceneId;
+    if (prev && activeSceneId && prev !== activeSceneId) setHistory((h) => [...h.filter((id) => id !== prev), prev].slice(-10));
+  }, [activeSceneId]);
+  const previousId = [...history].reverse().find((id) => id !== activeSceneId && data?.scenes.some((s) => s.id === id));
+  const previous = data?.scenes.find((s) => s.id === previousId);
   if (collapsed)
     return (
       <button className="w-8 border-r border-border bg-surface text-muted hover:text-text" onClick={() => setCollapsed(false)} aria-label="Show scenes">
@@ -423,6 +433,17 @@ function ScenesSidebar({ campaignId, engine }: { campaignId: string; engine: Syn
           Hide
         </button>
       </div>
+      {previous && (
+        <button
+          className="mx-2 mb-1 flex items-center gap-1 rounded-md px-2 py-1 text-left text-xs text-accent hover:bg-surface-2"
+          onClick={() => {
+            setHistory((h) => h.filter((id) => id !== previous.id));
+            void engine.command('switchActiveScene', { sceneId: previous.id }).catch((e: Error) => toast.error(e.message));
+          }}
+        >
+          <ArrowLeft className="h-3 w-3" aria-hidden /> Back to {previous.name}
+        </button>
+      )}
       <ul className="space-y-0.5 px-2">
         {(data?.scenes ?? []).map((s) => (
           <li key={s.id}>

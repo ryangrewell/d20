@@ -34,6 +34,7 @@ import * as creatures from '../services/creatures';
 import * as encounters from '../services/encounters';
 import * as journal from '../services/journal';
 import * as checkpoints from '../services/checkpoints';
+import * as floorplans from '../services/floorplans';
 import { visibleMessages } from '../services/chat';
 import { loadCampaign } from '../context';
 import { CreateCharacterInput, CreatureInput, EncounterInput, ImportCharacterInput, ItemInput, JournalInput, UpdateCharacterInput } from '@shared/schemas/characters';
@@ -199,6 +200,10 @@ export function createApp(deps: Deps, verify: TokenVerifier, extra?: (app: Hono<
     await journal.deleteJournal(deps, c.get('actor'), id(c, 'cid'), id(c, 'jid'));
     return c.json({ ok: true });
   });
+
+  // ------------------------------------------------------------- floorplans
+  app.get('/campaigns/:cid/floorplans', async (c) => c.json(await floorplans.listFloorplans(deps, c.get('actor'), id(c, 'cid'))));
+  app.post('/campaigns/:cid/floorplans', async (c) => c.json(await floorplans.createFloorplan(deps, c.get('actor'), id(c, 'cid'), await body(c, floorplans.CreateFloorplanInput)), 201));
 
   // ------------------------------------------------------------ checkpoints
   app.get('/campaigns/:cid/scenes/:scid/checkpoints', async (c) => c.json(await checkpoints.listCheckpoints(deps, c.get('actor'), id(c, 'cid'), id(c, 'scid'))));

@@ -4,11 +4,11 @@ import { AppError, invalid, notFound } from '@shared/errors';
 import { sniffImage } from '@shared/image';
 import type { MapAsset, MapDefinition, Scene } from '@shared/model';
 import type { CreateSceneInput, FinalizeMapInput, UpdateMapInput, UpdateSceneInput, UploadMapIntentInput } from '@shared/schemas/api';
-import { keys } from '../repo/db';
+import { keys, type TxItem } from '../repo/db';
 import { loadCampaign, requireActiveCampaign, requireGM, type Actor, type Deps } from '../context';
 import { rateLimit } from './rateLimit';
 
-async function gmContext(deps: Deps, actor: Actor, campaignId: string) {
+export async function gmContext(deps: Deps, actor: Actor, campaignId: string) {
   const ctx = await loadCampaign(deps, actor, campaignId);
   requireGM(ctx);
   requireActiveCampaign(ctx);
@@ -41,10 +41,9 @@ export async function uploadMapIntent(deps: Deps, actor: Actor, campaignId: stri
   return { assetId: id, uploadUrl, headers: { 'Content-Type': input.contentType } };
 }
 
-/** Verifies the uploaded object's real signature, size and pixel dimensions, then creates the map. */
-export async function finalizeMap(deps: Deps, actor: Actor, campaignId: string, input: z.output<typeof FinalizeMapInput>) {
-  await gmContext(deps, actor, campaignId);
-  const asset = await deps.db.get<MapAsset>(keys.asset(campaignId, input.assetId));
+/** Verifies an uploaded object's real signature, size and pixel dimensions and marks it READY. */
+export async function verifyUploadedImage(deps: Deps, campaignId: string, assetId: string) {
+  const asset = await deps.db.get<MapAsset>(keys.asset(campaignId, assetId));
   if (!asset) throw notFound('Upload');
   if (asset.status === 'READY') throw new AppError('CONFLICT', 'This upload was already processed.');
   const head = await deps.blobs.head(asset.s3Key);
@@ -55,7 +54,26 @@ export async function finalizeMap(deps: Deps, actor: Actor, campaignId: string, 
   if (sniffed.contentType !== asset.contentType) throw invalid('The file contents do not match its type.');
   if (sniffed.width < 16 || sniffed.height < 16) throw invalid('That image is too small to use as a map.');
   if (sniffed.width * sniffed.height > deps.config.maxMapPixelCount) throw invalid('That image has too many pixels. Try a smaller export.');
+  const ready: TxItem = {
+    Update: {
+      Key: keys.asset(campaignId, asset.id),
+      UpdateExpression: 'SET #s = :ready, widthPx = :w, heightPx = :h, bytes = :b',
+      ConditionExpression: '#s = :pending',
+      ExpressionAttributeNames: { '#s': 'status' },
+      ExpressionAttributeValues: { ':ready': 'READY', ':pending': 'PENDING', ':w': sniffed.width, ':h': sniffed.height, ':b': head.bytes },
+    },
+  };
+  return { asset, width: sniffed.width, height: sniffed.height, ready };
+}
 
+export function mapItem(map: MapDefinition) {
+  return { ...keys.map(map.campaignId, map.id), entity: 'Map', ...map };
+}
+
+/** Verifies the uploaded object's real signature, size and pixel dimensions, then creates the map. */
+export async function finalizeMap(deps: Deps, actor: Actor, campaignId: string, input: z.output<typeof FinalizeMapInput>) {
+  await gmContext(deps, actor, campaignId);
+  const { asset, width, height, ready } = await verifyUploadedImage(deps, campaignId, input.assetId);
   const now = deps.now().toISOString();
   const map: MapDefinition = {
     id: ulid(),
@@ -63,25 +81,14 @@ export async function finalizeMap(deps: Deps, actor: Actor, campaignId: string, 
     assetId: asset.id,
     name: input.name,
     category: input.category,
-    widthPx: sniffed.width,
-    heightPx: sniffed.height,
+    widthPx: width,
+    heightPx: height,
     grid: { type: 'none', intervalMeters: 1.524, displayInterval: 5, displayUnit: 'ft', originX: 0, originY: 0, rotationRadians: 0, snapEnabled: true, showEnabled: true, opacity: 0.35 },
     createdAt: now,
     updatedAt: now,
     ...(input.parentMapId ? { parentMapId: input.parentMapId } : {}),
   };
-  await deps.db.transact([
-    {
-      Update: {
-        Key: keys.asset(campaignId, asset.id),
-        UpdateExpression: 'SET #s = :ready, widthPx = :w, heightPx = :h, bytes = :b',
-        ConditionExpression: '#s = :pending',
-        ExpressionAttributeNames: { '#s': 'status' },
-        ExpressionAttributeValues: { ':ready': 'READY', ':pending': 'PENDING', ':w': sniffed.width, ':h': sniffed.height, ':b': head.bytes },
-      },
-    },
-    { Put: { Item: { ...keys.map(campaignId, map.id), entity: 'Map', ...map } } },
-  ]);
+  await deps.db.transact([ready, { Put: { Item: mapItem(map) } }]);
   return map;
 }
 
@@ -118,6 +125,10 @@ export async function updateMap(deps: Deps, actor: Actor, campaignId: string, ma
 
 // ------------------------------------------------------------------ scenes
 
+export function sceneItem(scene: Scene) {
+  return { ...keys.scene(scene.id), GSI1PK: `CAMP#${scene.campaignId}`, GSI1SK: `SCENE#${scene.id}`, entity: 'Scene', ...scene };
+}
+
 export async function createScene(deps: Deps, actor: Actor, campaignId: string, input: z.output<typeof CreateSceneInput>) {
   await gmContext(deps, actor, campaignId);
   const map = await deps.db.get<MapDefinition>(keys.map(campaignId, input.mapId));
@@ -134,7 +145,7 @@ export async function createScene(deps: Deps, actor: Actor, campaignId: string, 
     updatedAt: now,
     ...(input.parentSceneId ? { parentSceneId: input.parentSceneId } : {}),
   };
-  await deps.db.put({ ...keys.scene(scene.id), GSI1PK: `CAMP#${campaignId}`, GSI1SK: `SCENE#${scene.id}`, entity: 'Scene', ...scene });
+  await deps.db.put(sceneItem(scene));
   return scene;
 }
 

@@ -12,9 +12,9 @@ The spec's **first deliverable works locally end to end** and is covered by an a
 |---|---|
 | `tsc -b` (app, server, scripts, tests) + `tsc -p amplify` | pass |
 | `eslint .` | pass |
-| Unit + web tests (25) | pass |
-| Integration tests vs DynamoDB Local + MinIO (30) | pass |
-| Playwright journeys (2): first deliverable, gameplay | pass |
+| Unit + web tests (32) | pass |
+| Integration tests vs DynamoDB Local + MinIO (32) | pass |
+| Playwright journeys (3): first deliverable, gameplay, interior generator | pass |
 | `vite build` | pass |
 | `cdk synth` of Amplify backend (offline) | pass |
 
@@ -60,7 +60,15 @@ The spec's **first deliverable works locally end to end** and is covered by an a
 - [x] Journal & handouts: GM-only / everyone / chosen players, live "shared with you" notice (plain text; images not yet)
 - [x] D08 Session lifecycle (plan/start/pause/resume/end) + Zoom/Teams link
 
-**Epic E / F** — Not started, except `scripts/bootstrap-admin.ts` (F02, written but not run) and Amplify infrastructure with alarms and an optional budget (part of F06).
+**Epic E — Map generation**
+- [x] E01 Deterministic, seeded generator for 13 building types, exact footprint, 1–4 floors + basement, density, style
+- [x] E02 Connectivity, stairs alignment, overlap and coverage validator; doors, windows and stairs rendered
+- [x] E03 Floors uploaded as images with exact server-side calibration and a 5 ft / 1.5 m grid; floorplans saved, reopenable, JSON export/import
+- [x] E04 Scene portals (GM-only stair/door pins, "Go there with everyone") and "Back to" navigation
+- [ ] E05 License-reviewed 5E SRD sheet
+- [ ] E06 M&M-compatible custom-sheet preset
+
+**Epic F** — Not started, except `scripts/bootstrap-admin.ts` (F02, used live) and Amplify infrastructure with alarms and an optional budget (part of F06).
 
 ## Active risks
 
@@ -73,7 +81,8 @@ The spec's **first deliverable works locally end to end** and is covered by an a
 
 ## Next tasks
 
-1. Phase 5 interior generator; Phase 6 delegation API/UI, admin dashboard, audit.
+1. Phase 6: GM delegation (API/UI, expiry, epoch rekey), admin dashboard, moderation reports, audit log.
+2. Additional rules: 5E SRD adapter with attribution; M&M-compatible custom sheet.
 
 ## Manual AWS actions required
 

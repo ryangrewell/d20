@@ -145,6 +145,7 @@ const handlers: { [K in CommandType]: Handler<K> } = {
       ...(gmNotes ? { gmNotes } : {}),
       ...(character ? { characterId: character.id } : {}),
       ...(p.loot?.length ? { loot: p.loot } : {}),
+      ...(p.portal ? { portal: await requirePortalTarget(ctx, p.portal.targetSceneId) } : {}),
       ...(template ? { gmStats: { hp: { current: template.hpMax, max: template.hpMax }, ...(template.ac !== undefined ? { ac: template.ac } : {}), initiativeMod: template.initiativeMod, templateId: template.id } } : {}),
     };
     return { changes: [{ kind: 'object', after: obj, fog }], writes: [{ Put: { Item: objectItem(obj), ConditionExpression: 'attribute_not_exists(PK)' } }], result: { objectId: obj.id } };
@@ -156,8 +157,10 @@ const handlers: { [K in CommandType]: Handler<K> } = {
     const { obj, fog } = await loadObjectFor(ctx, p.objectId, await findObjectScene(ctx, p.objectId));
     if (p.patch.assignedControllerSub) await requireMember(ctx, p.patch.assignedControllerSub);
     const after: SceneObject = { ...obj, revision: obj.revision + 1, updatedAt: ctx.deps.now().toISOString() };
-    const { label, tint, assignedControllerSub, allowedViewerIds, characterId, gmStats, conditions, ...rest } = p.patch;
+    const { label, tint, assignedControllerSub, allowedViewerIds, characterId, gmStats, conditions, portal, ...rest } = p.patch;
     Object.assign(after, rest);
+    if (portal === null) delete after.portal;
+    else if (portal) after.portal = await requirePortalTarget(ctx, portal.targetSceneId);
     if (conditions) after.conditions = [...new Set(conditions)];
     if (gmStats) after.gmStats = { ...obj.gmStats, ...gmStats };
     if (characterId === null) delete after.characterId;
@@ -346,6 +349,12 @@ export function baseMessage(ctx: HandlerCtx, body: string, kind: ChatMessage['ki
 
 export function chatItem(m: ChatMessage) {
   return { ...keys.chat(m.campaignId, m.id), entity: 'Chat', ...m };
+}
+
+async function requirePortalTarget(ctx: HandlerCtx, targetSceneId: string) {
+  const target = await ctx.deps.db.get<Scene>(keys.scene(targetSceneId));
+  if (!target || target.campaignId !== ctx.session.campaignId) throw notFound('Scene');
+  return { targetSceneId };
 }
 
 async function requireMember(ctx: HandlerCtx, sub: string) {

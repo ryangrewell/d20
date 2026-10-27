@@ -30,6 +30,7 @@ All routes are under `/api`. They need `Authorization: Bearer <Cognito ID token>
 | GET/POST/PATCH/DELETE | `/campaigns/:cid/creatures[/:crid]` | GM-only creature library |
 | GET/POST/PATCH/DELETE | `/campaigns/:cid/encounters[/:eid]` | GM-only encounter templates (`groups: [{ creatureId, count }]`, ≤30 creatures) |
 | GET/POST/PATCH/DELETE | `/campaigns/:cid/journal[/:jid]` | List returns only readable entries; writes GM-only. `visibility: GM_ONLY\|ALL\|SELECTED_PLAYERS` |
+| GET/POST | `/campaigns/:cid/floorplans` | GM; POST `{ input, roomNames, showLabels, fogInitial, floors: [{ level, assetId }] }`. Server regenerates and validates, checks image proportions, creates calibrated maps, scenes and stair portal pins |
 | GET/POST | `/campaigns/:cid/scenes/:scid/checkpoints` | GM; save `{ label }` / list newest first |
 | DELETE | `/campaigns/:cid/scenes/:scid/checkpoints/:cpid` | GM |
 | GET | `/campaigns/:cid/chat?before=<msgId>&limit=N` | Older chat (oldest-first page + `hasMore`), whispers filtered by recipient |
@@ -44,8 +45,8 @@ All routes are under `/api`. They need `Authorization: Bearer <Cognito ID token>
 | Type | Who | Payload |
 |---|---|---|
 | `moveToken` | GM, or the token's controller | `objectId, x, y, expectedObjectRevision?` |
-| `spawnSceneObject` | GM | `sceneId, objectType, x, y, label?, tint?, sizeMeters?, visibility, allowedViewerIds?, assignedControllerSub?, gmNotes?, templateId?, characterId?, loot?` |
-| `updateSceneObject` | GM | `objectId, patch{ label, tint, …, conditions, loot, gmStats, characterId }` |
+| `spawnSceneObject` | GM | `sceneId, objectType, x, y, label?, tint?, sizeMeters?, visibility, allowedViewerIds?, assignedControllerSub?, gmNotes?, templateId?, characterId?, loot?, portal?` |
+| `updateSceneObject` | GM | `objectId, patch{ label, tint, …, conditions, loot, gmStats, characterId, portal }` |
 | `removeSceneObject` | GM | `objectId` |
 | `transferSceneObject` | GM | `objectId, targetSceneId, x?, y?` (defaults to the target map's centre; keeps id, controller, appearance) |
 | `updateFog` | GM | `sceneId, op{ mode, shape: rect\|polygon\|brush }` |

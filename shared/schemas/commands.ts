@@ -38,6 +38,7 @@ export const CommandPayloads = {
     /** Link a PC token to a character sheet. */
     characterId: Id.optional(),
     loot: LootEntries.optional(),
+    portal: z.object({ targetSceneId: Id }).optional(),
   }),
   updateSceneObject: z.object({
     objectId: Id,
@@ -56,6 +57,7 @@ export const CommandPayloads = {
         loot: LootEntries,
         gmStats: GmStats,
         characterId: Id.nullable(),
+        portal: z.object({ targetSceneId: Id }).nullable(),
       })
       .partial(),
   }),

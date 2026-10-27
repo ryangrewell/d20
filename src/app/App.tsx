@@ -18,6 +18,7 @@ import { LegalPage } from '@/features/home/LegalPage';
 const TabletopPage = lazy(() => import('@/features/tabletop/TabletopPage'));
 const MapSetupPage = lazy(() => import('@/features/maps/MapSetupPage'));
 const CharacterPage = lazy(() => import('@/features/characters/CharacterPage'));
+const GeneratorPage = lazy(() => import('@/features/generator/GeneratorPage'));
 
 
 const fallback = (
@@ -48,6 +49,7 @@ export function App() {
                 <Route path="/campaigns/:campaignId" element={<CampaignPage />} />
                 <Route path="/campaigns/:campaignId/maps/:mapId" element={<MapSetupPage />} />
                 <Route path="/campaigns/:campaignId/characters/:characterId" element={<CharacterPage />} />
+                <Route path="/campaigns/:campaignId/generator" element={<GeneratorPage />} />
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

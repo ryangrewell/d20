@@ -173,6 +173,8 @@ export type SceneObject = {
   characterId?: string;
   /** Contents of a LOOT object that players may pick up. */
   loot?: LootEntry[];
+  /** GM-only: this pin is a doorway/staircase leading to another scene. */
+  portal?: { targetSceneId: string };
   /** GM-only. */
   gmNotes?: string;
   /** GM-only creature stats (HP, AC, initiative) copied from a template or set ad hoc. */

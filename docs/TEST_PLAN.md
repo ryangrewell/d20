@@ -17,6 +17,6 @@
 | J5 resume next week | Automated (integration) |
 | J6 delegation | Resolution logic unit-tested; API/UI not built |
 | J7 moderation | Not built |
-| J8 interior generator | Not built |
+| J8 interior generator | Automated: unit sweep of 390 generated plans (valid, connected, aligned stairs, exact footprint, reproducible), integration (exact 60 ft calibration, proportions check, GM-only stair portals), E2E (UI generate → add → measure → follow stairs → back) |
 
 Not yet done: load test with 1 GM + 5 players, p95 latency measurement, 4096² map performance check, accessibility audit.
