@@ -85,6 +85,17 @@ async function findByToken(deps: Deps, token: string): Promise<CampaignInvite | 
   return inv ?? null;
 }
 
+/**
+ * Removed players can come back only through a link the GM made after removing them, so an old
+ * (possibly unlimited) link they still hold doesn't undo the removal. Admin removals are final here.
+ */
+function rejoinBlock(existing: CampaignMember | null, inv: CampaignInvite): string | null {
+  if (existing?.status !== 'REMOVED') return null;
+  if (existing.removedByAdmin) return 'You were removed from this campaign by a moderator.';
+  if (existing.removedAt && inv.createdAt <= existing.removedAt) return 'You were removed from this campaign. This link was made before that, so ask the GM for a new invite link.';
+  return null;
+}
+
 const INVALID = () => new AppError('NOT_FOUND', 'This invitation link is invalid, expired, or has been revoked.');
 
 /** Minimal preview for a signed-in user holding the link. Reveals no private campaign content. */
@@ -96,7 +107,7 @@ export async function previewInvite(deps: Deps, actor: Actor, token: string) {
   if (!campaign || campaign.status !== 'ACTIVE') throw INVALID();
   const owner = await deps.db.get<CampaignMember>(keys.member(campaign.id, campaign.ownerSub));
   const existing = await deps.db.get<CampaignMember>(keys.member(campaign.id, actor.sub));
-  return { campaignId: campaign.id, title: campaign.title, gmName: owner?.displayName ?? 'Your GM', role: inv.role, alreadyMember: existing?.status === 'ACTIVE' };
+  return { campaignId: campaign.id, title: campaign.title, gmName: owner?.displayName ?? 'Your GM', role: inv.role, alreadyMember: existing?.status === 'ACTIVE', blockedReason: rejoinBlock(existing, inv) };
 }
 
 /** Atomically consumes one use and creates the membership. Double redemption and over-use are rejected. */
@@ -112,7 +123,8 @@ export async function acceptInvite(deps: Deps, actor: Actor, token: string) {
   const campaign = await deps.db.get<Campaign>(keys.campaign(inv.campaignId));
   if (!campaign || campaign.status !== 'ACTIVE') throw INVALID();
 
-  if (existing?.status === 'REMOVED') throw new AppError('FORBIDDEN', 'You were removed from this campaign. Ask the GM to add you back.');
+  const block = rejoinBlock(existing, inv);
+  if (block) throw new AppError('FORBIDDEN', block);
 
   const members = await listMembers(deps, campaign.id);
   const used = new Set(members.map((m) => m.color));
@@ -129,7 +141,8 @@ export async function acceptInvite(deps: Deps, actor: Actor, token: string) {
           ExpressionAttributeValues: { ':one': 1, ':now': now.toISOString() },
         },
       },
-      { Put: { Item: memberItem(member), ConditionExpression: 'attribute_not_exists(PK)' } },
+      // A removed player may rejoin (rejoinBlock allowed it); an active one can't be overwritten.
+      { Put: { Item: memberItem(member), ConditionExpression: 'attribute_not_exists(PK) OR #s = :removed', ExpressionAttributeNames: { '#s': 'status' }, ExpressionAttributeValues: { ':removed': 'REMOVED' } } },
     ]);
   } catch (err) {
     if (isConditionalFailure(err)) {

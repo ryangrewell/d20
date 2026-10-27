@@ -172,7 +172,7 @@ export async function removeMemberOverride(deps: Deps, actor: Actor, campaignId:
   if (campaign.ownerSub === sub) throw forbidden('The campaign owner cannot be removed.');
   const m = await deps.db.get<CampaignMember>(keys.member(campaignId, sub));
   if (!m || m.status !== 'ACTIVE') throw notFound('Member');
-  await deps.db.update({ Key: keys.member(campaignId, sub), UpdateExpression: 'SET #s = :r', ExpressionAttributeNames: { '#s': 'status' }, ExpressionAttributeValues: { ':r': 'REMOVED' } });
+  await deps.db.update({ Key: keys.member(campaignId, sub), UpdateExpression: 'SET #s = :r, removedAt = :now, removedByAdmin = :t', ExpressionAttributeNames: { '#s': 'status' }, ExpressionAttributeValues: { ':r': 'REMOVED', ':now': deps.now().toISOString(), ':t': true } });
   await rotateLiveEpochs(deps, campaignId, 'member-removed');
   await audit(deps, { actorSub: actor.sub, action: 'MEMBER_REMOVED_BY_ADMIN', targetType: 'CAMPAIGN', targetId: campaignId, campaignId, reason: input.reason, outcome: 'SUCCESS', metadata: { memberSub: sub } });
 }

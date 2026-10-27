@@ -40,12 +40,13 @@ export function InvitePage() {
             <p className="mt-2 text-sm text-muted">
               Run by {preview.data.gmName} · joining as {preview.data.role === 'SPECTATOR' ? 'a spectator' : 'a player'}
             </p>
+            {preview.data.blockedReason && <p className="mt-4 rounded-lg border border-danger/40 bg-danger/10 p-3 text-left text-sm">{preview.data.blockedReason}</p>}
             {accept.error && (
               <div className="mt-4 text-left">
                 <ErrorNotice error={accept.error} />
               </div>
             )}
-            <Button size="lg" className="mt-8 w-full justify-center" loading={accept.isPending} onClick={() => accept.mutate()}>
+            <Button size="lg" className="mt-8 w-full justify-center" loading={accept.isPending} disabled={!!preview.data.blockedReason} onClick={() => accept.mutate()}>
               {preview.data.alreadyMember ? 'Open campaign' : 'Join campaign'}
             </Button>
           </>

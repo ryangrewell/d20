@@ -274,6 +274,21 @@ d('campaign lifecycle, tabletop and security', () => {
     expect((await bob.call('GET', `/sessions/${sessionId}/snapshot`)).status).toBe(404);
   });
 
+  it('lets a removed player back in only through a link made after the removal', async () => {
+    // Bob was removed in the previous test. A fresh link from the GM brings him back.
+    const link = await gm.call('POST', `/campaigns/${campaignId}/invites`, { role: 'PLAYER' });
+    expect((await bob.call('POST', '/invites/preview', { token: link.body.token })).body.blockedReason).toBeNull();
+    expect((await bob.call('POST', '/invites/accept', { token: link.body.token })).body).toEqual({ campaignId, alreadyMember: false });
+    expect((await bob.call('GET', `/campaigns/${campaignId}`)).status).toBe(200);
+
+    // Removed again: that same (unlimited) link is now older than the removal and no longer works.
+    await new Promise((r) => setTimeout(r, 5));
+    expect((await gm.call('DELETE', `/campaigns/${campaignId}/members/${bob.sub}`)).status).toBe(200);
+    expect((await bob.call('POST', '/invites/preview', { token: link.body.token })).body.blockedReason).toMatch(/new invite link/);
+    expect((await bob.call('POST', '/invites/accept', { token: link.body.token })).status).toBe(403);
+    expect((await bob.call('GET', `/campaigns/${campaignId}`)).status).toBe(404);
+  });
+
   it('denies a blocked account even with a valid token (negative test 8)', async () => {
     await h.deps.db.update({ Key: keys.profile(alice.sub), UpdateExpression: 'SET #s = :b', ExpressionAttributeNames: { '#s': 'status' }, ExpressionAttributeValues: { ':b': 'BLOCKED' } });
     expect((await alice.call('GET', `/campaigns/${campaignId}`)).status).toBe(403);

@@ -106,9 +106,9 @@ export async function removeMember(deps: Deps, actor: Actor, campaignId: string,
   if (!member || member.status !== 'ACTIVE') throw notFound('Member');
   await deps.db.update({
     Key: keys.member(campaignId, userSub),
-    UpdateExpression: 'SET #s = :removed',
+    UpdateExpression: 'SET #s = :removed, removedAt = :now',
     ExpressionAttributeNames: { '#s': 'status' },
-    ExpressionAttributeValues: { ':removed': 'REMOVED' },
+    ExpressionAttributeValues: { ':removed': 'REMOVED', ':now': deps.now().toISOString() },
   });
   // Existing realtime subscriptions are bound to the old epoch; rotating it cuts the removed member off.
   await rotateLiveEpochs(deps, campaignId, 'member-removed');

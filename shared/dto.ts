@@ -20,7 +20,7 @@ export type CampaignDashboardDto = {
 
 export type InviteDto = Omit<CampaignInvite, 'tokenHash'> & { status: 'ACTIVE' | 'EXPIRED' | 'REVOKED' | 'USED_UP' };
 
-export type InvitePreviewDto = { campaignId: string; title: string; gmName: string; role: string; alreadyMember: boolean };
+export type InvitePreviewDto = { campaignId: string; title: string; gmName: string; role: string; alreadyMember: boolean; blockedReason: string | null };
 
 export type SnapshotMember = { userSub: string; displayName: string; color: string; role: CampaignRole };
 

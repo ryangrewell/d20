@@ -51,6 +51,10 @@ export type CampaignMember = {
   displayName: string;
   color: string;
   joinedAt: string;
+  /** Set on removal. A GM's invite link created after this lets the player rejoin; older links don't. */
+  removedAt?: string;
+  /** Platform-admin removals can't be undone by the GM with a new link. */
+  removedByAdmin?: boolean;
 };
 
 export type CampaignInvite = {
