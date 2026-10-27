@@ -31,7 +31,11 @@ import * as maps from '../services/maps';
 import { executeCommand } from '../services/commands';
 import * as characters from '../services/characters';
 import * as creatures from '../services/creatures';
-import { CreateCharacterInput, CreatureInput, ImportCharacterInput, ItemInput, UpdateCharacterInput } from '@shared/schemas/characters';
+import * as encounters from '../services/encounters';
+import * as journal from '../services/journal';
+import { visibleMessages } from '../services/chat';
+import { loadCampaign } from '../context';
+import { CreateCharacterInput, CreatureInput, EncounterInput, ImportCharacterInput, ItemInput, JournalInput, UpdateCharacterInput } from '@shared/schemas/characters';
 
 type Env = { Variables: { actor: Actor } };
 
@@ -175,6 +179,37 @@ export function createApp(deps: Deps, verify: TokenVerifier, extra?: (app: Hono<
   app.delete('/campaigns/:cid/creatures/:crid', async (c) => {
     await creatures.deleteCreature(deps, c.get('actor'), id(c, 'cid'), id(c, 'crid'));
     return c.json({ ok: true });
+  });
+
+  // ------------------------------------------------------------- encounters
+  app.get('/campaigns/:cid/encounters', async (c) => c.json(await encounters.listEncounters(deps, c.get('actor'), id(c, 'cid'))));
+  app.post('/campaigns/:cid/encounters', async (c) => c.json(await encounters.createEncounter(deps, c.get('actor'), id(c, 'cid'), await body(c, EncounterInput)), 201));
+  app.patch('/campaigns/:cid/encounters/:eid', async (c) => c.json(await encounters.updateEncounter(deps, c.get('actor'), id(c, 'cid'), id(c, 'eid'), await body(c, EncounterInput))));
+  app.delete('/campaigns/:cid/encounters/:eid', async (c) => {
+    await encounters.deleteEncounter(deps, c.get('actor'), id(c, 'cid'), id(c, 'eid'));
+    return c.json({ ok: true });
+  });
+
+  // ---------------------------------------------------------------- journal
+  app.get('/campaigns/:cid/journal', async (c) => c.json(await journal.listJournal(deps, c.get('actor'), id(c, 'cid'))));
+  app.post('/campaigns/:cid/journal', async (c) => c.json(await journal.createJournal(deps, c.get('actor'), id(c, 'cid'), await body(c, JournalInput)), 201));
+  app.patch('/campaigns/:cid/journal/:jid', async (c) => c.json(await journal.updateJournal(deps, c.get('actor'), id(c, 'cid'), id(c, 'jid'), await body(c, JournalInput))));
+  app.delete('/campaigns/:cid/journal/:jid', async (c) => {
+    await journal.deleteJournal(deps, c.get('actor'), id(c, 'cid'), id(c, 'jid'));
+    return c.json({ ok: true });
+  });
+
+  // ----------------------------------------------------------- chat history
+  app.get('/campaigns/:cid/chat', async (c) => {
+    const actor = c.get('actor');
+    const ctx = await loadCampaign(deps, actor, id(c, 'cid'));
+    const before = c.req.query('before');
+    if (before !== undefined && !IdParam.safeParse(before).success) throw new AppError('INVALID_INPUT', 'Invalid cursor.');
+    const limit = Math.min(100, Math.max(1, Number(c.req.query('limit') ?? 50) | 0));
+    const messages = await visibleMessages(deps, ctx.campaign.id, actor.sub, ctx.access.isGM, limit + 1, before);
+    // visibleMessages returns oldest-first; one extra row tells us whether more exist.
+    const hasMore = messages.length > limit;
+    return c.json({ messages: hasMore ? messages.slice(1) : messages, hasMore });
   });
 
   app.notFound((c) => c.json({ error: { code: 'NOT_FOUND', message: 'Not found.' } }, 404));

@@ -22,6 +22,7 @@ import { loadCreature } from './creatures';
 import { loadCharacter } from './characters';
 import { initiativeHandlers } from './initiative';
 import { pickupLoot } from './loot';
+import { spawnEncounter } from './encounters';
 
 export type HandlerCtx = { deps: Deps; actor: Actor; session: GameSession; campaign: CampaignContext };
 export type HandlerOutput = { changes: Change[]; writes: TransactItem[]; result?: unknown; projectionSession?: GameSession };
@@ -73,6 +74,7 @@ async function clampToMap(ctx: HandlerCtx, scene: Scene, x: number, y: number) {
 const handlers: { [K in CommandType]: Handler<K> } = {
   ...initiativeHandlers,
   pickupLoot,
+  spawnEncounter,
   async moveToken(ctx, p) {
     requirePlayable(ctx);
     const sceneId = ctx.campaign.access.isGM ? await findObjectScene(ctx, p.objectId) : undefined;

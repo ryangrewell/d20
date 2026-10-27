@@ -116,6 +116,26 @@ test('character sheet, dice, loot pickup and initiative through the UI', async (
   expect(playerEntries).toEqual(['Rook']);
   await expect(p.getByLabel('Initiative order').getByText('Ogre')).toHaveCount(0);
 
+  // GM places a two-ogre encounter from GM tools; both land hidden, the player sees neither.
+  const enc = await gm.call('POST', `/campaigns/${campaign.id}/encounters`, { name: 'Ogre pair', groups: [{ creatureId: ogre.id, count: 2 }] });
+  await g.reload();
+  await g.getByRole('tab', { name: 'GM tools' }).click();
+  await g.getByLabel('Place an encounter').selectOption(enc.id);
+  const box = (await g.getByRole('application').boundingBox())!;
+  await g.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.6);
+  await expect.poll(async () => Object.values((await table(g)).objects).map((o: any) => o.appearance.label)).toEqual(expect.arrayContaining(['Ogre 1', 'Ogre 2']));
+  expect(Object.values((await table(p)).objects).map((o: any) => o.appearance.label)).not.toContain('Ogre 1');
+
+  // GM shares a private journal entry from the table; the player is notified and can read it.
+  await gm.call('POST', `/campaigns/${campaign.id}/journal`, { title: 'Torn map', body: 'X marks the crypt.' });
+  await g.getByRole('tab', { name: 'Journal' }).click();
+  await g.getByRole('button', { name: /Torn map/ }).click();
+  await g.getByRole('button', { name: 'Share with everyone' }).click();
+  await expect(p.getByText('The GM shared “Torn map”')).toBeVisible();
+  await p.getByRole('tab', { name: 'Journal' }).click();
+  await p.getByRole('button', { name: /Torn map/ }).click();
+  await expect(p.getByText('X marks the crypt.')).toBeVisible();
+
   await plCtx.close();
   await gmCtx.close();
   await api.dispose();

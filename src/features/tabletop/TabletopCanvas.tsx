@@ -178,6 +178,12 @@ export function TabletopCanvas({ engine, onCamera, cameraRef }: { engine: SyncEn
       case 'spawn': {
         const at = snapPoint(clampToMap(p));
         const t = s.spawn;
+        if (t.encounterId) {
+          void engine
+            .command('spawnEncounter', { encounterId: t.encounterId, sceneId: sceneId!, x: at.x, y: at.y, visibility: t.visibility })
+            .catch((err: Error) => toast.error(err.message));
+          return;
+        }
         void engine
           .command('spawnSceneObject', {
             sceneId: sceneId!,

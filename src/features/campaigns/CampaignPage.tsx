@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Crown, MapIcon, Play, Settings, Skull, UserRound, Users, Video } from 'lucide-react';
+import { BookOpen, Crown, MapIcon, Play, Settings, Skull, UserRound, Users, Video } from 'lucide-react';
 import { useCampaign } from '@/lib/api/hooks';
 import { Badge, Button, ErrorNotice, Spinner, cn } from '@/components/ui/primitives';
 import { SessionsTab } from './SessionsTab';
@@ -9,8 +9,9 @@ import { MembersTab } from './MembersTab';
 import { SettingsTab } from './SettingsTab';
 import { CharactersTab } from './CharactersTab';
 import { CreaturesTab } from './CreaturesTab';
+import { JournalView } from '@/features/journal/JournalView';
 
-type Tab = 'sessions' | 'characters' | 'maps' | 'creatures' | 'members' | 'settings';
+type Tab = 'sessions' | 'characters' | 'journal' | 'maps' | 'creatures' | 'members' | 'settings';
 
 export function CampaignPage() {
   const { campaignId = '' } = useParams();
@@ -35,6 +36,7 @@ export function CampaignPage() {
   const tabs: { id: Tab; label: string; icon: typeof Play; gmOnly?: boolean }[] = [
     { id: 'sessions', label: 'Sessions', icon: Play },
     { id: 'characters', label: 'Characters', icon: UserRound },
+    { id: 'journal', label: 'Journal', icon: BookOpen },
     { id: 'maps', label: 'Maps & scenes', icon: MapIcon, gmOnly: true },
     { id: 'creatures', label: 'Creatures', icon: Skull, gmOnly: true },
     { id: 'members', label: 'Players', icon: Users },
@@ -97,6 +99,11 @@ export function CampaignPage() {
       <div className="mt-6" role="tabpanel">
         {tab === 'sessions' && <SessionsTab data={data} />}
         {tab === 'characters' && <CharactersTab data={data} />}
+        {tab === 'journal' && (
+          <div className="max-w-3xl">
+            <JournalView campaignId={campaign.id} isGM={access.isGM} members={data.members} />
+          </div>
+        )}
         {tab === 'maps' && access.isGM && <MapsTab data={data} />}
         {tab === 'creatures' && access.isGM && <CreaturesTab data={data} />}
         {tab === 'members' && <MembersTab data={data} />}

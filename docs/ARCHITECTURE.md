@@ -57,7 +57,8 @@ Channel paths include `accessEpoch`. Removing a member (and, later, revoking a d
 | Fog op | `SCENE#id` | `FOG#seq` | |
 | Character | `CAMP#id` | `CHAR#id` | |
 | Inventory item / GM-edit audit | `CHAR#id` | `ITEM#id` / `AUDIT#ulid` | |
-| Creature template | `CAMP#id` | `CREATURE#id` | |
+| Creature / encounter template | `CAMP#id` | `CREATURE#id` / `ENCOUNTER#id` | |
+| Journal entry | `CAMP#id` | `JOURNAL#id` | |
 | Chat / roll | `CHAT#campaignId` | `MSG#ulid` | |
 | Rate window | `RATE#bucket` | `W#window` (TTL) | |
 

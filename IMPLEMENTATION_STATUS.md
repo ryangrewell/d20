@@ -12,8 +12,8 @@ The spec's **first deliverable works locally end to end** and is covered by an a
 |---|---|
 | `tsc -b` (app, server, scripts, tests) + `tsc -p amplify` | pass |
 | `eslint .` | pass |
-| Unit tests (23) | pass |
-| Integration tests vs DynamoDB Local + MinIO (23) | pass |
+| Unit + web tests (25) | pass |
+| Integration tests vs DynamoDB Local + MinIO (26) | pass |
 | Playwright journeys (2): first deliverable, gameplay | pass |
 | `vite build` | pass |
 | `cdk synth` of Amplify backend (offline) | pass |
@@ -52,10 +52,11 @@ The spec's **first deliverable works locally end to end** and is covered by an a
 - [x] D01 Declarative, versioned adapter contract + generic-d20 adapter
 - [x] D02 Character sheets: owner/GM-only, revisioned, GM edits audited, derived stats, dice buttons, JSON import/export
 - [x] D03 Inventory (qty/state/charges/tags, GM-only notes), loot piles with contents, atomic pickup (race-tested)
-- [~] D04 Creature library (HP/AC/initiative/notes) with spawn and GM-only stats/HP bars. Multi-creature encounter templates not built
+- [x] D04 Creature library (HP/AC/initiative/notes) and encounter templates (groups placed together, hidden by default), GM-only stats/HP bars
 - [x] D05 Server-rolled initiative tracker (hidden combatants stripped for players, round counter, players end their own turn) + conditions on tokens and sheets
 - [x] D06 Server-side dice (kh/kl/dh/dl, limits), PUBLIC / GM / SELF, persisted log
-- [x] D07 Table chat + whispers (recipient-scoped). No pagination UI for older messages
+- [x] D07 Table chat + whispers (recipient-scoped) with "Load older messages" paging
+- [x] Journal & handouts: GM-only / everyone / chosen players, live "shared with you" notice (plain text; images not yet)
 - [x] D08 Session lifecycle (plan/start/pause/resume/end) + Zoom/Teams link
 
 **Epic E / F** — Not started, except `scripts/bootstrap-admin.ts` (F02, written but not run) and Amplify infrastructure with alarms and an optional budget (part of F06).
@@ -71,9 +72,8 @@ The spec's **first deliverable works locally end to end** and is covered by an a
 
 ## Next tasks
 
-1. Remaining Phase 4 polish: encounter templates (groups of creatures), chat history pagination, journal/handouts.
-2. Outbox publisher; GM undo for recent reversible commands; scene checkpoints.
-3. Phase 5 interior generator; Phase 6 delegation API/UI, admin dashboard, audit.
+1. Outbox publisher; GM undo for recent reversible commands; scene checkpoints.
+2. Phase 5 interior generator; Phase 6 delegation API/UI, admin dashboard, audit.
 
 ## Manual AWS actions required
 

@@ -54,6 +54,8 @@ export type DurableEventBody =
   | { type: 'INITIATIVE_UPDATED'; initiative: InitiativeState }
   /** Only the id travels; authorised clients refetch the sheet. */
   | { type: 'CHARACTER_UPDATED'; characterId: string }
+  /** Sent only to viewers who may read the entry; `shared` true when it was just shared with them. */
+  | { type: 'JOURNAL_UPDATED'; entryId: string; title: string; shared: boolean }
   | { type: 'ACCESS_CHANGED'; reason: 'epoch-rotated' | 'member-removed' };
 
 /**

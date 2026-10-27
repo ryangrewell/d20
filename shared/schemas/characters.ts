@@ -53,3 +53,19 @@ export const CreatureInput = z.object({
   initiativeMod: z.number().int().min(-50).max(50).default(0),
   notes: plainText(10000).default(''),
 });
+
+export const EncounterInput = z.object({
+  name: plainText(80).pipe(z.string().min(1, 'Name the encounter')),
+  notes: plainText(10000).default(''),
+  groups: z
+    .array(z.object({ creatureId: z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/), count: z.number().int().min(1).max(30) }))
+    .min(1, 'Add at least one creature')
+    .max(20),
+});
+
+export const JournalInput = z.object({
+  title: plainText(120).pipe(z.string().min(1, 'Give the entry a title')),
+  body: plainText(50000).default(''),
+  visibility: z.enum(['GM_ONLY', 'ALL', 'SELECTED_PLAYERS']).default('GM_ONLY'),
+  allowedViewerIds: z.array(UserSub).max(50).optional(),
+});

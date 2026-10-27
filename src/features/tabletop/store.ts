@@ -23,6 +23,8 @@ export type SpawnTemplate = {
   templateId?: string;
   /** Character sheet to link a PC token to. */
   characterId?: string;
+  /** Place a whole encounter (several creatures) instead of one token. */
+  encounterId?: string;
 };
 
 export type TableState = {
@@ -48,6 +50,8 @@ export type TableState = {
   followGM: boolean;
   focus: { x: number; y: number; zoom: number; at: number } | null;
   unread: number;
+  /** Whether older chat messages exist beyond what is loaded. */
+  chatHasMore: boolean;
 };
 
 export const initialTableState = (): TableState => ({
@@ -72,6 +76,7 @@ export const initialTableState = (): TableState => ({
   followGM: true,
   focus: null,
   unread: 0,
+  chatHasMore: false,
 });
 
 export const useTable = create<TableState>(() => initialTableState());

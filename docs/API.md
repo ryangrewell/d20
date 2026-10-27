@@ -28,6 +28,9 @@ All routes are under `/api`. They need `Authorization: Bearer <Cognito ID token>
 | GET | `/campaigns/:cid/characters/:chid/export` | Platform JSON (`format: d20.character`, `version: 1`) without GM notes |
 | POST/PATCH/DELETE | `/campaigns/:cid/characters/:chid/items[/:iid]` | Inventory; owner or GM; `gmNote` GM-only |
 | GET/POST/PATCH/DELETE | `/campaigns/:cid/creatures[/:crid]` | GM-only creature library |
+| GET/POST/PATCH/DELETE | `/campaigns/:cid/encounters[/:eid]` | GM-only encounter templates (`groups: [{ creatureId, count }]`, ≤30 creatures) |
+| GET/POST/PATCH/DELETE | `/campaigns/:cid/journal[/:jid]` | List returns only readable entries; writes GM-only. `visibility: GM_ONLY\|ALL\|SELECTED_PLAYERS` |
+| GET | `/campaigns/:cid/chat?before=<msgId>&limit=N` | Older chat (oldest-first page + `hasMore`), whispers filtered by recipient |
 
 ## Commands
 
@@ -47,6 +50,7 @@ All routes are under `/api`. They need `Authorization: Bearer <Cognito ID token>
 | `resetFog` | GM | `sceneId, initial` |
 | `switchActiveScene` | GM | `sceneId` |
 | `presenterFocus` | GM | `sceneId, center, zoom` |
+| `spawnEncounter` | GM | `encounterId, sceneId, x, y, visibility` (default hidden); numbered copies in a grid around the point |
 | `pickupLoot` | member (own character) or GM | `objectId, entryId, characterId, quantity`; atomic, one winner per item |
 | `rollInitiative` | GM, or a player for their own tokens | `objectIds[]`; server rolls 1d20 + modifier from sheet or creature stats |
 | `setInitiativeEntry` / `removeInitiativeEntry` | GM | manual combatants |

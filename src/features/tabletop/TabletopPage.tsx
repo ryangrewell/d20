@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
+  BookOpen,
   Brush,
   Crosshair,
   EyeOff,
@@ -37,6 +38,7 @@ import { GMPanel } from './panels/GMPanel';
 import { CharacterPanel } from './panels/CharacterPanel';
 import { InitiativeTracker } from './panels/InitiativeTracker';
 import { LootCard } from './panels/LootCard';
+import { JournalView } from '@/features/journal/JournalView';
 
 export default function TabletopPage({ display = false }: { display?: boolean }) {
   const { campaignId = '', sessionId = '' } = useParams();
@@ -119,7 +121,7 @@ function Table({ engine, campaignId, sessionId }: { engine: SyncEngine; campaign
   const fogBrush = useTable((s) => s.fogBrush);
   const navigate = useNavigate();
   const isGM = snap.viewMode === 'gm';
-  const [panel, setPanel] = useState<'chat' | 'character' | 'gm'>(isGM ? 'gm' : 'chat');
+  const [panel, setPanel] = useState<'chat' | 'character' | 'journal' | 'gm'>(isGM ? 'gm' : 'chat');
   const [zoom, setZoom] = useState(1);
   const camRef = useRef<{ fit: () => void; get: () => Camera; set: (c: Camera) => void } | null>(null);
   const session = snap.session;
@@ -254,7 +256,7 @@ function Table({ engine, campaignId, sessionId }: { engine: SyncEngine; campaign
                   to enable grid and measuring.
                 </div>
               )}
-              <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-xl border border-border bg-surface/95 p-1 shadow-xl backdrop-blur" role="toolbar" aria-label="Table tools">
+              <div className="scrollbar-thin absolute bottom-3 left-1/2 flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-xl border border-border bg-surface/95 p-1 shadow-xl backdrop-blur" role="toolbar" aria-label="Table tools">
                 {tools
                   .filter((t) => !t.gm || isGM)
                   .map((t) => (
@@ -324,7 +326,7 @@ function Table({ engine, campaignId, sessionId }: { engine: SyncEngine; campaign
           )}
         </main>
 
-        <aside className="flex w-[22rem] shrink-0 flex-col border-l border-border bg-surface" aria-label="Side panel">
+        <aside className="flex w-80 shrink-0 flex-col xl:w-[22rem] border-l border-border bg-surface" aria-label="Side panel">
           <div className="flex border-b border-border" role="tablist">
             <button role="tab" aria-selected={panel === 'chat'} onClick={() => setPanel('chat')} className={cn('flex flex-1 items-center justify-center gap-2 py-2.5 text-sm', panel === 'chat' ? 'border-b-2 border-accent text-text' : 'text-muted')}>
               <MessageSquare className="h-4 w-4" aria-hidden /> Chat
@@ -333,13 +335,20 @@ function Table({ engine, campaignId, sessionId }: { engine: SyncEngine; campaign
             <button role="tab" aria-selected={panel === 'character'} onClick={() => setPanel('character')} className={cn('flex flex-1 items-center justify-center gap-2 py-2.5 text-sm', panel === 'character' ? 'border-b-2 border-accent text-text' : 'text-muted')}>
               <UserRound className="h-4 w-4" aria-hidden /> {isGM ? 'Sheets' : 'Character'}
             </button>
+            <button role="tab" aria-selected={panel === 'journal'} aria-label="Journal" title="Journal" onClick={() => setPanel('journal')} className={cn('flex items-center justify-center gap-2 px-3 py-2.5 text-sm', panel === 'journal' ? 'border-b-2 border-accent text-text' : 'text-muted')}>
+              <BookOpen className="h-4 w-4" aria-hidden />
+            </button>
             {isGM && (
               <button role="tab" aria-selected={panel === 'gm'} onClick={() => setPanel('gm')} className={cn('flex flex-1 items-center justify-center gap-2 py-2.5 text-sm', panel === 'gm' ? 'border-b-2 border-accent text-text' : 'text-muted')}>
                 <Shield className="h-4 w-4" aria-hidden /> GM tools
               </button>
             )}
           </div>
-          <div className="min-h-0 flex-1">{panel === 'character' ? <CharacterPanel engine={engine} /> : panel === 'gm' && isGM ? <GMPanel engine={engine} /> : <ChatPanel engine={engine} />}</div>
+          <div className="min-h-0 flex-1">{panel === 'journal' ? (
+              <div className="scrollbar-thin h-full overflow-y-auto p-3">
+                <JournalView campaignId={snap.campaign.id} isGM={isGM} members={snap.members} compact />
+              </div>
+            ) : panel === 'character' ? <CharacterPanel engine={engine} /> : panel === 'gm' && isGM ? <GMPanel engine={engine} /> : <ChatPanel engine={engine} />}</div>
           <Players />
         </aside>
       </div>

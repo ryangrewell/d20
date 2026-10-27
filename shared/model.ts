@@ -201,6 +201,32 @@ export type CreatureTemplate = {
   updatedAt: string;
 };
 
+export type EncounterTemplate = {
+  id: string;
+  campaignId: string;
+  name: string;
+  /** GM-only tactics / trigger notes. */
+  notes: string;
+  groups: { creatureId: string; count: number }[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type JournalVisibility = 'GM_ONLY' | 'ALL' | 'SELECTED_PLAYERS';
+
+export type JournalEntry = {
+  id: string;
+  campaignId: string;
+  title: string;
+  /** Plain text; rendered as text, never HTML. */
+  body: string;
+  visibility: JournalVisibility;
+  allowedViewerIds?: string[];
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Character = {
   id: string;
   campaignId: string;

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CampaignDashboardDto, CampaignListItem, InviteDto, InvitePreviewDto, MeDto } from '@shared/dto';
-import type { Campaign, Character, CreatureTemplate, GameSession, InventoryItem, MapDefinition, Scene } from '@shared/model';
+import type { Campaign, Character, ChatMessage, CreatureTemplate, EncounterTemplate, GameSession, InventoryItem, JournalEntry, MapDefinition, Scene } from '@shared/model';
 import { api } from './client';
 
 export const qk = {
@@ -12,6 +12,8 @@ export const qk = {
   characters: (cid: string) => ['characters', cid] as const,
   character: (cid: string, id: string) => ['character', cid, id] as const,
   creatures: (cid: string) => ['creatures', cid] as const,
+  encounters: (cid: string) => ['encounters', cid] as const,
+  journal: (cid: string) => ['journal', cid] as const,
 };
 
 export type CharacterList = { characters: Character[]; others: { id: string; name: string; ownerSub: string }[]; system: { id: string; version: string } };
@@ -31,6 +33,25 @@ export const characterApi = {
   addItem: (cid: string, id: string, input: Record<string, unknown>) => api<InventoryItem>(`/campaigns/${cid}/characters/${id}/items`, { body: input }),
   updateItem: (cid: string, id: string, itemId: string, input: Record<string, unknown>) => api<InventoryItem>(`/campaigns/${cid}/characters/${id}/items/${itemId}`, { method: 'PATCH', body: input }),
   removeItem: (cid: string, id: string, itemId: string) => api(`/campaigns/${cid}/characters/${id}/items/${itemId}`, { method: 'DELETE' }),
+};
+
+export const useEncounters = (cid: string, enabled = true) => useQuery({ queryKey: qk.encounters(cid), queryFn: () => api<EncounterTemplate[]>(`/campaigns/${cid}/encounters`), enabled: enabled && !!cid });
+export const useJournal = (cid: string) => useQuery({ queryKey: qk.journal(cid), queryFn: () => api<JournalEntry[]>(`/campaigns/${cid}/journal`), enabled: !!cid });
+
+export const encounterApi = {
+  create: (cid: string, input: Record<string, unknown>) => api<EncounterTemplate>(`/campaigns/${cid}/encounters`, { body: input }),
+  update: (cid: string, id: string, input: Record<string, unknown>) => api<EncounterTemplate>(`/campaigns/${cid}/encounters/${id}`, { method: 'PATCH', body: input }),
+  remove: (cid: string, id: string) => api(`/campaigns/${cid}/encounters/${id}`, { method: 'DELETE' }),
+};
+
+export const journalApi = {
+  create: (cid: string, input: Record<string, unknown>) => api<JournalEntry>(`/campaigns/${cid}/journal`, { body: input }),
+  update: (cid: string, id: string, input: Record<string, unknown>) => api<JournalEntry>(`/campaigns/${cid}/journal/${id}`, { method: 'PATCH', body: input }),
+  remove: (cid: string, id: string) => api(`/campaigns/${cid}/journal/${id}`, { method: 'DELETE' }),
+};
+
+export const chatApi = {
+  older: (cid: string, before: string, limit = 50) => api<{ messages: ChatMessage[]; hasMore: boolean }>(`/campaigns/${cid}/chat?limit=${limit}&before=${before}`),
 };
 
 export const creatureApi = {

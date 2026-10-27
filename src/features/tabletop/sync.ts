@@ -14,6 +14,7 @@ import type { CursorPacket } from '@shared/model';
 import { api, ApiError } from '@/lib/api/client';
 import { createTransport, SubscribeDenied, type RealtimeTransport } from '@/lib/realtime/transport';
 import { queryClient } from '@/lib/queryClient';
+import { chatApi } from '@/lib/api/hooks';
 import { getTable, initialTableState, setTable, type TableObject } from './store';
 
 const CURSOR_TTL_MS = 8000;
@@ -125,6 +126,8 @@ export class SyncEngine {
       fogVersion: prev.fogVersion + 1,
       lastFogOp: null,
       chat: snap.chat.length || this.view === 'shared' ? snap.chat : prev.chat,
+      // The snapshot carries the latest 60 visible messages; assume older ones may exist.
+      chatHasMore: snap.chat.length >= 60,
       revision: snap.revision,
       error: null,
       ...(sceneChanged ? { selectedId: null, cursors: {} } : {}),
@@ -193,7 +196,7 @@ export class SyncEngine {
       case 'CHAT_MESSAGE_CREATED':
         if (this.seen.has(`chat:${item.message.id}`)) return;
         this.seen.add(`chat:${item.message.id}`);
-        setTable({ chat: [...s.chat.slice(-199), item.message], unread: s.unread + 1 });
+        setTable({ chat: [...s.chat.slice(-999), item.message], unread: s.unread + 1 });
         return;
       case 'PRESENTER_FOCUS':
         if (item.focus.sceneId === sceneId) setTable({ focus: { ...item.focus.center, zoom: item.focus.zoom, at: Date.now() } });
@@ -207,6 +210,12 @@ export class SyncEngine {
           void queryClient.invalidateQueries({ queryKey: ['character', cid, item.characterId] });
           void queryClient.invalidateQueries({ queryKey: ['characters', cid] });
         }
+        return;
+      }
+      case 'JOURNAL_UPDATED': {
+        const cid = s.snapshot?.campaign.id;
+        if (cid) void queryClient.invalidateQueries({ queryKey: ['journal', cid] });
+        if (item.shared && s.snapshot?.viewMode !== 'gm') toast.message(`The GM shared “${item.title}”`, { description: 'Open the Journal tab to read it.' });
         return;
       }
       case 'ACCESS_CHANGED':
@@ -279,6 +288,17 @@ export class SyncEngine {
 
   leaveCursor() {
     this.sendPresence({ type: 'LEAVE' });
+  }
+
+  /** Prepends an older page of chat (visibility filtered by the server). */
+  async loadOlderChat() {
+    const s = getTable();
+    const cid = s.snapshot?.campaign.id;
+    const oldest = s.chat[0];
+    if (!cid || !oldest) return;
+    const page = await chatApi.older(cid, oldest.id);
+    const known = new Set(getTable().chat.map((m) => m.id));
+    setTable({ chat: [...page.messages.filter((m) => !known.has(m.id)), ...getTable().chat], chatHasMore: page.hasMore });
   }
 
   // ---------------------------------------------------------------- commands

@@ -3,7 +3,7 @@ import { ArrowRightLeft, Eye, EyeOff, Heart, Plus, Trash2, Users, X } from 'luci
 import { toast } from 'sonner';
 import type { SceneObject } from '@shared/model';
 import { Button, Field, Input, Select, cn } from '@/components/ui/primitives';
-import { useCampaign, useCharacters, useCreatures } from '@/lib/api/hooks';
+import { useCampaign, useCharacters, useCreatures, useEncounters } from '@/lib/api/hooks';
 import { getAdapter } from '@shared/game-systems/registry';
 import { Conditions } from '@/features/characters/CharacterSheet';
 import { setTable, useTable, type SpawnTemplate } from '../store';
@@ -27,6 +27,7 @@ export function GMPanel({ engine }: { engine: SyncEngine }) {
   const players = members.filter((m) => m.role !== 'OWNER');
   const creatures = useCreatures(campaignId);
   const characters = useCharacters(campaignId);
+  const encounters = useEncounters(campaignId);
 
   return (
     <div className="scrollbar-thin h-full space-y-6 overflow-y-auto p-4">
@@ -50,6 +51,26 @@ export function GMPanel({ engine }: { engine: SyncEngine }) {
             </button>
           ))}
         </div>
+        {(encounters.data?.length ?? 0) > 0 && (
+          <Field label="Place an encounter" htmlFor="spawnEncounter" hint="Every creature in the group, around where you click.">
+            <Select
+              id="spawnEncounter"
+              className="h-8 text-xs"
+              value={spawn.encounterId ?? ''}
+              onChange={(e) => {
+                const enc = encounters.data?.find((x) => x.id === e.target.value);
+                setTable({ spawn: enc ? { objectType: 'CREATURE', label: enc.name, tint: '#b23a48', visibility: spawn.visibility, encounterId: enc.id } : { ...spawn, encounterId: undefined }, ...(enc ? { tool: 'spawn' as const } : {}) });
+              }}
+            >
+              <option value="">Choose an encounter…</option>
+              {encounters.data!.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.name} ({x.groups.reduce((n, g) => n + g.count, 0)})
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
         {(creatures.data?.length ?? 0) > 0 && (
           <Field label="From creature library" htmlFor="spawnTemplate">
             <Select

@@ -9,6 +9,9 @@ const QUICK = ['1d20', '2d6', '1d8', '1d4', '1d12', '1d100'];
 
 export function ChatPanel({ engine }: { engine: SyncEngine }) {
   const chat = useTable((s) => s.chat);
+  const chatHasMore = useTable((s) => s.chatHasMore);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const stickToBottom = useRef(true);
   const snap = useTable((s) => s.snapshot);
   const listRef = useRef<HTMLDivElement>(null);
   const [text, setText] = useState('');
@@ -21,9 +24,26 @@ export function ChatPanel({ engine }: { engine: SyncEngine }) {
   const canWhisperTo = members.filter((m) => m.userSub !== me?.sub && (me?.isGM || settings?.playerWhispers || m.role === 'OWNER'));
 
   useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
+    if (stickToBottom.current) listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
+    stickToBottom.current = true;
     setTable({ unread: 0 });
   }, [chat.length]);
+
+  const loadOlder = async () => {
+    const el = listRef.current;
+    const fromBottom = el ? el.scrollHeight - el.scrollTop : 0;
+    setLoadingOlder(true);
+    stickToBottom.current = false;
+    try {
+      await engine.loadOlderChat();
+      // Keep the reader's place after prepending.
+      requestAnimationFrame(() => el && (el.scrollTop = el.scrollHeight - fromBottom));
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
 
   const send = async () => {
     const body = text.trim();
@@ -48,6 +68,13 @@ export function ChatPanel({ engine }: { engine: SyncEngine }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div ref={listRef} className="scrollbar-thin flex-1 space-y-2 overflow-y-auto p-3" aria-live="polite" aria-label="Chat and dice log">
+        {chatHasMore && (
+          <div className="text-center">
+            <Button size="sm" variant="ghost" loading={loadingOlder} onClick={() => void loadOlder()}>
+              Load older messages
+            </Button>
+          </div>
+        )}
         {chat.length === 0 && <p className="py-8 text-center text-xs text-faint">No messages yet. Say hello, or roll with /r 1d20.</p>}
         {chat.map((m) => {
           const whisper = m.scope === 'WHISPER';
@@ -68,7 +95,9 @@ export function ChatPanel({ engine }: { engine: SyncEngine }) {
                   {m.kind === 'ROLL' ? (m.roll?.visibility === 'SELF' ? 'Private roll' : 'Secret roll to GM') : `Whisper${others.length ? ` to ${others.map(nameOf).join(', ')}` : ''}`}
                 </p>
               )}
-              {m.kind === 'ROLL' && m.roll ? (
+              {m.kind === 'SYSTEM' ? (
+                <p className="mt-0.5 text-xs italic text-muted">{m.body}</p>
+              ) : m.kind === 'ROLL' && m.roll ? (
                 <div className="mt-1">
                   <div className="flex items-center gap-2">
                     <Dices className="h-4 w-4 text-accent" aria-hidden />
