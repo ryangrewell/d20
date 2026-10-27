@@ -26,7 +26,12 @@ import { eventsAuthFunction } from './functions/events/resource';
 
 const backend = defineBackend({ auth, apiFunction, eventsAuthFunction });
 
-const allowedOrigins = (process.env.D20_ALLOWED_ORIGINS ?? 'https://d20.ryangrewell.com,http://localhost:5173').split(',').map((o) => o.trim()).filter(Boolean);
+// Amplify Hosting sets AWS_APP_ID/AWS_BRANCH during branch builds; allow that branch's default URL automatically.
+const branchOrigin =
+  process.env.AWS_APP_ID && process.env.AWS_BRANCH ? [`https://${process.env.AWS_BRANCH.replace(/[^A-Za-z0-9-]/g, '-')}.${process.env.AWS_APP_ID}.amplifyapp.com`] : [];
+const allowedOrigins = [
+  ...new Set([...(process.env.D20_ALLOWED_ORIGINS ?? 'https://d20.ryangrewell.com,http://localhost:5173').split(','), ...branchOrigin].map((o) => o.trim()).filter(Boolean)),
+];
 
 // ------------------------------------------------------------------- data
 const dataStack = backend.createStack('d20data');
