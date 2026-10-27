@@ -29,6 +29,7 @@ Copy `amplify_outputs.json` to `public/amplify_outputs.json` when running Vite a
    ```bash
    npx tsx scripts/bootstrap-admin.ts --user-pool-id <pool id from amplify_outputs.json> --sub <your Cognito sub>
    ```
+   An **Admin** link appears in the top nav within about a minute (the server checks the group live; no sign-out needed). Adding the group in the Cognito console works too.
 5. Smoke test: sign up, create campaign, invite, upload/calibrate map, two browsers on one table.
 
 ## Custom domain (only after owner approval)

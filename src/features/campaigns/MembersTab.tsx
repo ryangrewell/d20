@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { Copy, Crown, Link2, Trash2, UserMinus } from 'lucide-react';
+import { Copy, Crown, Flag, Link2, Trash2, UserMinus } from 'lucide-react';
 import { toast } from 'sonner';
 import type { CampaignDashboardDto } from '@shared/dto';
 import { campaignApi, qk, useCampaignMutation, useInvites } from '@/lib/api/hooks';
 import { useAuth } from '@/app/auth';
 import { Badge, Button, Card, Field, Select } from '@/components/ui/primitives';
+import { DelegationSection } from './DelegationSection';
+import { ReportDialog, type ReportTarget } from '@/features/reports/ReportDialog';
 
 export function MembersTab({ data }: { data: CampaignDashboardDto }) {
   const { campaign, access, members } = data;
@@ -15,6 +17,7 @@ export function MembersTab({ data }: { data: CampaignDashboardDto }) {
   const [maxUses, setMaxUses] = useState('');
   const [expires, setExpires] = useState('168');
   const [lastLink, setLastLink] = useState<string | null>(null);
+  const [reporting, setReporting] = useState<ReportTarget | null>(null);
   const create = useCampaignMutation(
     campaign.id,
     () => campaignApi.createInvite(campaign.id, { ...(maxUses ? { maxUses: Number(maxUses) } : {}), ...(expires ? { expiresInHours: Number(expires) } : {}) }),
@@ -49,6 +52,11 @@ export function MembersTab({ data }: { data: CampaignDashboardDto }) {
                   <Badge>{m.role === 'SPECTATOR' ? 'Spectator' : 'Player'}</Badge>
                 )}
               </div>
+              {m.userSub !== user?.sub && !access.isOwner && (
+                <Button size="sm" variant="ghost" aria-label={`Report ${m.displayName}`} onClick={() => setReporting({ targetType: 'USER', targetId: m.userSub, campaignId: campaign.id, label: m.displayName })}>
+                  <Flag className="h-4 w-4" aria-hidden />
+                </Button>
+              )}
               {access.isOwner && m.role !== 'OWNER' && (
                 <Button
                   size="sm"
@@ -64,6 +72,9 @@ export function MembersTab({ data }: { data: CampaignDashboardDto }) {
               )}
             </Card>
           ))}
+        </div>
+        <div className="mt-8">
+          <DelegationSection data={data} />
         </div>
       </section>
 
@@ -139,6 +150,7 @@ export function MembersTab({ data }: { data: CampaignDashboardDto }) {
           </div>
         </section>
       )}
+      {reporting && <ReportDialog target={reporting} onClose={() => setReporting(null)} />}
     </div>
   );
 }

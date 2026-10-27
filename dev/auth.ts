@@ -71,6 +71,7 @@ export function registerDevAuth(app: Hono<never>, db: Db, secret: string) {
     const ok = !!user && timingSafeEqual(Buffer.from(hash(input.password, user.salt), 'hex'), Buffer.from(user.passwordHash, 'hex'));
     if (!ok) throw new AppError('UNAUTHENTICATED', 'Incorrect email or password.');
     if (!user.verified) throw new AppError('FORBIDDEN', 'Please verify your email first.', { nextStep: 'CONFIRM_SIGN_UP' });
+    if ((user as DevUser & { disabled?: boolean }).disabled) throw new AppError('FORBIDDEN', 'This account has been disabled.');
     const idToken = await mintDevToken(secret, { sub: user.sub, email: user.email, name: user.displayName, groups: user.groups ?? [] });
     return c.json({ idToken, user: { sub: user.sub, email: user.email, displayName: user.displayName } });
   });
@@ -97,6 +98,16 @@ export function registerDevAuth(app: Hono<never>, db: Db, secret: string) {
       UpdateExpression: 'SET passwordHash = :h, salt = :s, verified = :t REMOVE resetCode',
       ExpressionAttributeValues: { ':h': hash(input.newPassword, salt), ':s': salt, ':t': true },
     });
+    return c.json({ ok: true });
+  });
+
+  /** LOCAL ONLY stand-in for scripts/bootstrap-admin.ts (production uses the Cognito group). */
+  app.post('/dev/auth/grant-admin', async (c) => {
+    const input = await parse(c.req.raw, z.object({ email: Email }));
+    const user = await db.get<DevUser>(keys.devAuth(input.email));
+    if (!user) throw new AppError('NOT_FOUND', 'No such dev user.');
+    await setDevGroups(db, input.email, [...new Set([...(user.groups ?? []), 'platform-admin'])]);
+    console.log(`\n  [dev-auth] granted platform-admin to ${input.email}\n`);
     return c.json({ ok: true });
   });
 

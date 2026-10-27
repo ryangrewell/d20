@@ -15,8 +15,8 @@
 | J3 live tabletop | Automated (integration + E2E) except a 3-player run |
 | J4 whispers & loot | Automated: whisper privacy, and a two-player race for the last loot item (exactly one wins) |
 | J5 resume next week | Automated (integration) |
-| J6 delegation | Resolution logic unit-tested; API/UI not built |
-| J7 moderation | Not built |
+| J6 delegation | Automated: integration (owner-only grant, session scope, revoke cuts commands and GM channel, time-window expiry rekeys before publish, next-N ordinals) and E2E (delegate and revoke through the UI; the player loses GM tools live) |
+| J7 moderation | Automated: integration (live admin check vs stale claim, block/suspend/unblock with audit and epoch rotation, last-admin protection, member removal override, reports visibility rules) and E2E (admin blocks a player who then sees the blocked screen) |
 | J8 interior generator | Automated: unit sweep of 390 generated plans (valid, connected, aligned stairs, exact footprint, reproducible), integration (exact 60 ft calibration, proportions check, GM-only stair portals), E2E (UI generate → add → measure → follow stairs → back) |
 
 Not yet done: load test with 1 GM + 5 players, p95 latency measurement, 4096² map performance check, accessibility audit.

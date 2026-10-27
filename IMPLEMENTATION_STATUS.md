@@ -13,8 +13,8 @@ The spec's **first deliverable works locally end to end** and is covered by an a
 | `tsc -b` (app, server, scripts, tests) + `tsc -p amplify` | pass |
 | `eslint .` | pass |
 | Unit + web tests (32) | pass |
-| Integration tests vs DynamoDB Local + MinIO (32) | pass |
-| Playwright journeys (3): first deliverable, gameplay, interior generator | pass |
+| Integration tests vs DynamoDB Local + MinIO (39) | pass |
+| Playwright journeys (4): first deliverable, gameplay, interior generator, governance | pass |
 | `vite build` | pass |
 | `cdk synth` of Amplify backend (offline) | pass |
 
@@ -68,7 +68,13 @@ The spec's **first deliverable works locally end to end** and is covered by an a
 - [ ] E05 License-reviewed 5E SRD sheet
 - [ ] E06 M&M-compatible custom-sheet preset
 
-**Epic F** — Not started, except `scripts/bootstrap-admin.ts` (F02, used live) and Amplify infrastructure with alarms and an optional budget (part of F06).
+**Epic F — Governance**
+- [x] F01 Delegated GM: current/next N sessions, specific sessions, time window; members/characters permissions; owner-only grant/revoke; immediate epoch rotation; expiry rekey before publish; audited
+- [x] F02 Owner-admin bootstrap script (used live); local dev equivalent
+- [x] F03 Admin dashboard (users, activity, campaigns, live sessions, storage, reports), user search/detail, suspend/block/unblock (disables Cognito sign-in), revoke admin (never the last), campaign member removal override
+- [x] F04 User reports (user/message) with admin queue and resolution; append-only audit log; blocked/suspended account screen
+- [ ] F05 Load test (1 GM + 5 players), p95 latency, restore drill
+- [~] F06 Infra, domain, alarms, optional budget done; runbook partially in DEPLOYMENT.md
 
 ## Active risks
 
@@ -81,7 +87,7 @@ The spec's **first deliverable works locally end to end** and is covered by an a
 
 ## Next tasks
 
-1. Phase 6: GM delegation (API/UI, expiry, epoch rekey), admin dashboard, moderation reports, audit log.
+1. Phase 7 hardening: load test (1 GM + 5 players) and p95 latency measurement, 4096² map performance check, accessibility pass, restore drill and runbook.
 2. Additional rules: 5E SRD adapter with attribution; M&M-compatible custom sheet.
 
 ## Manual AWS actions required

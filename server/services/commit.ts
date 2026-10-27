@@ -9,6 +9,7 @@ import type { CampaignMember, GMDelegation, GameSession } from '@shared/model';
 import { isConditionalFailure, keys, type TxItem } from '../repo/db';
 import { buildBundles, bundlesForStorage, type Change, type SessionAudience } from '../realtime/fanout';
 import type { Actor, Deps } from '../context';
+import { rekeyExpiredDelegations } from './delegations';
 
 export type TransactItem = TxItem;
 
@@ -39,6 +40,8 @@ export async function commit(
   opts: { commandId?: string; result?: unknown; projectionSession?: GameSession } = {},
 ): Promise<{ revision: number; ts: string }> {
   const ts = deps.now().toISOString();
+  // Expired delegations rotate the access epoch before anything is published.
+  await rekeyExpiredDelegations(deps, session.campaignId);
   const bumped = await deps.db.update<GameSession>({
     Key: keys.session(session.id),
     UpdateExpression: 'ADD revision :one SET updatedAt = :now',
@@ -46,7 +49,7 @@ export async function commit(
     ExpressionAttributeValues: { ':one': 1, ':now': ts },
   });
   const revision = bumped!.revision;
-  const projection = { ...(opts.projectionSession ?? bumped!), revision };
+  const projection = { ...(opts.projectionSession ?? bumped!), revision, accessEpoch: bumped!.accessEpoch };
   const audience = await sessionAudience(deps, session);
   const eventId = ulid();
   const actorStamp = actor ? { sub: actor.sub, displayName: actor.displayName } : undefined;

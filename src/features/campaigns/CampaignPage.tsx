@@ -52,14 +52,15 @@ export function CampaignPage() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="font-display text-3xl font-bold tracking-wide">{campaign.title}</h1>
-            {access.isGM ? (
+            {access.isOwner ? (
               <Badge tone="accent">
                 <Crown className="h-3 w-3" aria-hidden /> You are the GM
               </Badge>
-            ) : (
+            ) : access.isGM ? null : (
               <Badge>Player</Badge>
             )}
             {campaign.status === 'ARCHIVED' && <Badge tone="danger">Archived</Badge>}
+            {access.isGM && !access.isOwner && <Badge tone="info">Acting GM (delegated)</Badge>}
           </div>
           {campaign.description && <p className="mt-2 max-w-2xl text-muted">{campaign.description}</p>}
         </div>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Dices, Lock, Send } from 'lucide-react';
+import { Dices, Flag, Lock, Send } from 'lucide-react';
+import { ReportDialog, type ReportTarget } from '@/features/reports/ReportDialog';
 import { toast } from 'sonner';
 import { Button, Select, cn } from '@/components/ui/primitives';
 import { setTable, useTable } from '../store';
@@ -18,6 +19,7 @@ export function ChatPanel({ engine }: { engine: SyncEngine }) {
   const [to, setTo] = useState('');
   const [rollVis, setRollVis] = useState<'PUBLIC' | 'GM' | 'SELF'>('PUBLIC');
   const [busy, setBusy] = useState(false);
+  const [reporting, setReporting] = useState<ReportTarget | null>(null);
   const me = snap?.me;
   const members = snap?.members ?? [];
   const settings = snap?.campaign.settings;
@@ -80,11 +82,21 @@ export function ChatPanel({ engine }: { engine: SyncEngine }) {
           const whisper = m.scope === 'WHISPER';
           const others = (m.recipientSubs ?? []).filter((s) => s !== m.senderSub);
           return (
-            <div key={m.id} className={cn('rounded-lg px-3 py-2 text-sm', whisper ? 'border border-[#a86cc1]/40 bg-[#a86cc1]/10' : 'bg-surface-2')}>
+            <div key={m.id} className={cn('group rounded-lg px-3 py-2 text-sm', whisper ? 'border border-[#a86cc1]/40 bg-[#a86cc1]/10' : 'bg-surface-2')}>
               <div className="flex items-baseline justify-between gap-2">
                 <span className="font-semibold" style={{ color: colorOf(m.senderSub) }}>
                   {m.senderName}
                 </span>
+                {m.senderSub !== me?.sub && m.kind === 'TEXT' && snap && (
+                  <button
+                    className="ml-auto text-faint opacity-0 transition hover:text-danger focus:opacity-100 group-hover:opacity-100"
+                    aria-label={`Report message from ${m.senderName}`}
+                    title="Report"
+                    onClick={() => setReporting({ targetType: 'MESSAGE', targetId: m.id, campaignId: snap.campaign.id, label: `message from ${m.senderName}` })}
+                  >
+                    <Flag className="h-3 w-3" />
+                  </button>
+                )}
                 <time className="shrink-0 text-[10px] text-faint" dateTime={m.createdAt} title={new Date(m.createdAt).toLocaleString()}>
                   {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </time>
@@ -156,6 +168,7 @@ export function ChatPanel({ engine }: { engine: SyncEngine }) {
           </Button>
         </form>
       </div>
+      {reporting && <ReportDialog target={reporting} onClose={() => setReporting(null)} />}
     </div>
   );
 }

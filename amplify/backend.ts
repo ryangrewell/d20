@@ -16,6 +16,7 @@ import { Duration, RemovalPolicy, Stack, CfnOutput } from 'aws-cdk-lib';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as appsync from 'aws-cdk-lib/aws-appsync';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as apigw from 'aws-cdk-lib/aws-apigatewayv2';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
@@ -83,6 +84,13 @@ for (const fn of [backend.apiFunction, backend.eventsAuthFunction]) {
 table.grantReadWriteData(apiLambda);
 table.grantReadData(eventsLambda);
 media.grantReadWrite(apiLambda, 'campaigns/*');
+// Admin area: live group checks, enable/disable sign-in, remove from the admin group. Scoped to this pool.
+apiLambda.addToRolePolicy(
+  new iam.PolicyStatement({
+    actions: ['cognito-idp:AdminListGroupsForUser', 'cognito-idp:ListUsersInGroup', 'cognito-idp:AdminDisableUser', 'cognito-idp:AdminEnableUser', 'cognito-idp:AdminRemoveUserFromGroup'],
+    resources: [userPool.userPoolArn],
+  }),
+);
 
 // --------------------------------------------------------- AppSync Events
 const eventApi = new appsync.EventApi(apiStack, 'Events', {

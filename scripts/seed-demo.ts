@@ -2,7 +2,7 @@
  * LOCAL DEVELOPMENT ONLY. Seeds demo accounts and a ready-to-play campaign
  * through the running dev server's public API (npm run dev must be running).
  *
- *   GM:      gm@d20.local      / d20-demo-pass
+ *   GM:      gm@d20.local      / d20-demo-pass   (also a local platform admin)
  *   Player:  player@d20.local  / d20-demo-pass
  *   Player:  player2@d20.local / d20-demo-pass
  *
@@ -108,6 +108,7 @@ function dungeonPng(): Uint8Array {
 
 async function main() {
   const gm = await account('gm@d20.local', 'Game Master');
+  await call('/dev/auth/grant-admin', { body: { email: 'gm@d20.local' } });
   const p1 = await account('player@d20.local', 'Aria');
   const p2 = await account('player2@d20.local', 'Bram');
 

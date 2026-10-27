@@ -35,6 +35,8 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   if (!res.ok) {
     const e = json?.error;
     if (res.status === 401) onUnauthenticated?.();
+    const accountStatus = e?.details?.accountStatus;
+    if (res.status === 403 && typeof accountStatus === 'string') window.dispatchEvent(new CustomEvent('d20:account-status', { detail: { status: accountStatus, message: e?.message ?? '' } }));
     throw new ApiError(e?.code ?? 'INTERNAL', e?.message ?? `Request failed (${res.status})`, res.status, e?.details);
   }
   return json as T;

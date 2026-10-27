@@ -11,7 +11,10 @@
 | Spoofed identity in cursor packet | `sanitizePresence` discards body identity, stamps member identity | negative 4 |
 | Upload into another campaign | Server-chosen S3 key under `campaigns/{id}/`, GM check | negative 5 |
 | Reading others' whispers | Recipient-filtered queries and per-user channels | negative 6, J4 |
-| Blocked user with valid JWT | Profile status checked on every request and subscribe | negative 8 |
+| Blocked user with valid JWT | Profile status checked on every request and subscribe; block also disables Cognito sign-in | negative 8, J7 |
+| Revoked / expired temporary GM | Delegation evaluated per request; revoke rotates epochs; expiry rekeys before the next publish | negative 7, J6 |
+| Stale admin token claim | Admin APIs re-check Cognito group membership live | J7 |
+| Removing the last admin | Refused | J7 |
 | Invite over-redemption | Conditional transaction | negative 9 |
 | Removed member keeps stream | Access-epoch rotation | epoch test |
 | Duplicate command retries | `commandId` idempotency records | idempotency test |
@@ -25,7 +28,6 @@ Rate limits: invite create/preview/accept, uploads, chat (40/min), dice (60/min)
 - **Map imagery is not fog-protected.** A player can download the full image of the active scene's map. Do not put spoilers in images you intend to fog. A future `strictFog` mode would serve per-player pre-obscured tiles.
 - Presence rate limiting in Lambda is per warm container, not global.
 - Cognito tokens are stored by Amplify in localStorage by default. Consider cookie storage plus a CSP review before launch.
-- Admin dashboard, moderation, reports and audit log are not built yet. The bootstrap script exists.
 - The AppSync Events Lambda handler is verified live on AWS, including denial: a removed member stops receiving updates and cannot resubscribe.
 
 ## Logging

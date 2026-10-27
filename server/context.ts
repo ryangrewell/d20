@@ -5,6 +5,7 @@ import { keys, type Db } from './repo/db';
 import type { Blobs } from './storage/blobs';
 import type { Publisher } from './realtime/publisher';
 import type { ServerConfig } from './config';
+import type { UserDirectory } from './auth/directory';
 import { PLATFORM_ADMIN_GROUP, type VerifiedIdentity } from './auth/verify';
 
 export type Deps = {
@@ -12,6 +13,7 @@ export type Deps = {
   blobs: Blobs;
   publisher: Publisher;
   config: ServerConfig;
+  directory: UserDirectory;
   now: () => Date;
   log: (level: 'info' | 'warn' | 'error', msg: string, meta?: Record<string, unknown>) => void;
 };
@@ -39,6 +41,10 @@ export async function resolveActor(deps: Deps, id: VerifiedIdentity): Promise<Ac
       profile = (await deps.db.get<UserProfile>(keys.profile(id.sub)))!;
     }
   }
+  // Coarse activity tracking for the admin dashboard (at most hourly per user).
+  if (!profile.lastActiveAt || deps.now().getTime() - new Date(profile.lastActiveAt).getTime() > 3600_000) {
+    void deps.db.update({ Key: keys.profile(id.sub), UpdateExpression: 'SET lastActiveAt = :t', ExpressionAttributeValues: { ':t': now } }).catch(() => undefined);
+  }
   if (!isAccountUsable(profile, deps.now())) {
     throw new AppError('FORBIDDEN', profile.status === 'BLOCKED' ? 'This account has been blocked.' : 'This account is suspended.', { accountStatus: profile.status });
   }
@@ -62,7 +68,12 @@ export async function loadCampaign(deps: Deps, actor: Actor, campaignId: string,
     deps.db.queryPrefix<GMDelegation>(`CAMP#${campaignId}`, 'DELEG#'),
   ]);
   if (!campaign) throw notFound('Campaign');
-  const access = resolveAccess(member, delegations, session, deps.now());
+  // Outside a session, judge session-scoped delegations against the campaign's live session.
+  let effectiveSession = session;
+  if (!effectiveSession && campaign.activeSessionId && delegations.some((d) => d.delegateSub === actor.sub)) {
+    effectiveSession = await deps.db.get<GameSession>(keys.session(campaign.activeSessionId));
+  }
+  const access = resolveAccess(member, delegations, effectiveSession, deps.now());
   if (!access.canView) throw notFound('Campaign');
   return { campaign, access, delegations };
 }

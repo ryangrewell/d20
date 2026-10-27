@@ -63,6 +63,8 @@ Channel paths include `accessEpoch`. Removing a member (and, later, revoking a d
 | Journal entry | `CAMP#id` | `JOURNAL#id` | |
 | Generated floorplan | `CAMP#id` | `FLOORPLAN#id` (input + seed, names, floor→map/scene) | |
 | Chat / roll | `CHAT#campaignId` | `MSG#ulid` | |
+| Audit event (append-only) | `AUDIT` | `at#ulid` | `AUDIT#type#id` / `at#ulid` |
+| Report | `REPORT` | `REPORT#ulid` | |
 | Rate window | `RATE#bucket` | `W#window` (TTL) | |
 
 No query scans across campaigns. Conditional writes and transactions cover invite redemption, object revisions (including loot pickup), character revisions, initiative version, fog sequence, and command idempotency.

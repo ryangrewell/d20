@@ -5,6 +5,7 @@ import { queryClient } from '@/lib/queryClient';
 import { Toaster } from 'sonner';
 import { Spinner } from '@/components/ui/primitives';
 import { AuthProvider, RequireAuth } from './auth';
+import { AccountStatusGate } from './AccountStatusGate';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { HomePage } from '@/features/home/HomePage';
 import { SignInPage, SignUpPage, VerifyPage, ForgotPasswordPage } from '@/features/auth/AuthPages';
@@ -19,6 +20,7 @@ const TabletopPage = lazy(() => import('@/features/tabletop/TabletopPage'));
 const MapSetupPage = lazy(() => import('@/features/maps/MapSetupPage'));
 const CharacterPage = lazy(() => import('@/features/characters/CharacterPage'));
 const GeneratorPage = lazy(() => import('@/features/generator/GeneratorPage'));
+const AdminPage = lazy(() => import('@/features/admin/AdminPage'));
 
 
 const fallback = (
@@ -32,6 +34,7 @@ export function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <BrowserRouter>
+          <AccountStatusGate>
           <Suspense fallback={fallback}>
             <Routes>
               <Route path="/" element={<HomePage />} />
@@ -50,10 +53,12 @@ export function App() {
                 <Route path="/campaigns/:campaignId/maps/:mapId" element={<MapSetupPage />} />
                 <Route path="/campaigns/:campaignId/characters/:characterId" element={<CharacterPage />} />
                 <Route path="/campaigns/:campaignId/generator" element={<GeneratorPage />} />
+                <Route path="/admin" element={<AdminPage />} />
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>
+          </AccountStatusGate>
         </BrowserRouter>
         <Toaster theme="dark" position="bottom-right" richColors closeButton />
       </AuthProvider>

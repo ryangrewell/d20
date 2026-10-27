@@ -35,6 +35,9 @@ import * as encounters from '../services/encounters';
 import * as journal from '../services/journal';
 import * as checkpoints from '../services/checkpoints';
 import * as floorplans from '../services/floorplans';
+import * as delegations from '../services/delegations';
+import * as admin from '../services/admin';
+import { listAudit } from '../services/audit';
 import { visibleMessages } from '../services/chat';
 import { loadCampaign } from '../context';
 import { CreateCharacterInput, CreatureInput, EncounterInput, ImportCharacterInput, ItemInput, JournalInput, UpdateCharacterInput } from '@shared/schemas/characters';
@@ -93,6 +96,10 @@ export function createApp(deps: Deps, verify: TokenVerifier, extra?: (app: Hono<
   app.get('/me', (c) => {
     const a = c.get('actor');
     return c.json({ sub: a.sub, displayName: a.displayName, isPlatformAdmin: a.isPlatformAdmin, status: a.profile.status, createdAt: a.profile.createdAt });
+  });
+  app.get('/me/admin', async (c) => {
+    // Live check (the token's group claim can be stale after a revoke).
+    return c.json({ isPlatformAdmin: await deps.directory.isAdmin(c.get('actor').sub).catch(() => false) });
   });
   app.patch('/me', async (c) => c.json(await campaigns.updateMyProfile(deps, c.get('actor'), await body(c, UpdateProfileInput))));
 
@@ -199,6 +206,45 @@ export function createApp(deps: Deps, verify: TokenVerifier, extra?: (app: Hono<
   app.delete('/campaigns/:cid/journal/:jid', async (c) => {
     await journal.deleteJournal(deps, c.get('actor'), id(c, 'cid'), id(c, 'jid'));
     return c.json({ ok: true });
+  });
+
+  // ------------------------------------------------------------ delegations
+  app.get('/campaigns/:cid/delegations', async (c) => c.json(await delegations.listDelegations(deps, c.get('actor'), id(c, 'cid'))));
+  app.post('/campaigns/:cid/delegations', async (c) => c.json(await delegations.createDelegation(deps, c.get('actor'), id(c, 'cid'), await body(c, delegations.CreateDelegationInput)), 201));
+  app.post('/campaigns/:cid/delegations/:did/revoke', async (c) => {
+    await delegations.revokeDelegation(deps, c.get('actor'), id(c, 'cid'), id(c, 'did'));
+    return c.json({ ok: true });
+  });
+
+  // ---------------------------------------------------------------- reports
+  app.post('/reports', async (c) => c.json(await admin.createReport(deps, c.get('actor'), await body(c, admin.CreateReportInput)), 201));
+
+  // ------------------------------------------------------------------ admin
+  const subParam = (c: Context) => {
+    const v = c.req.param('sub');
+    if (!v || !/^[A-Za-z0-9-]{1,64}$/.test(v)) throw new AppError('NOT_FOUND', 'Not found.');
+    return v;
+  };
+  app.get('/admin/metrics', async (c) => c.json(await admin.metrics(deps, c.get('actor'))));
+  app.get('/admin/users', async (c) => c.json(await admin.listUsers(deps, c.get('actor'), c.req.query('q') ?? '')));
+  app.get('/admin/users/:sub', async (c) => c.json(await admin.getUser(deps, c.get('actor'), subParam(c))));
+  app.post('/admin/users/:sub/suspend', async (c) => (await admin.suspendUser(deps, c.get('actor'), subParam(c), await body(c, admin.SuspendInput)), c.json({ ok: true })));
+  app.post('/admin/users/:sub/block', async (c) => (await admin.blockUser(deps, c.get('actor'), subParam(c), await body(c, admin.ModerationInput)), c.json({ ok: true })));
+  app.post('/admin/users/:sub/unblock', async (c) => (await admin.unblockUser(deps, c.get('actor'), subParam(c), await body(c, admin.ModerationInput)), c.json({ ok: true })));
+  app.post('/admin/users/:sub/revoke-admin', async (c) => (await admin.revokeAdmin(deps, c.get('actor'), subParam(c), await body(c, admin.ModerationInput)), c.json({ ok: true })));
+  app.get('/admin/campaigns', async (c) => c.json(await admin.listCampaigns(deps, c.get('actor'))));
+  app.post('/admin/campaigns/:cid/members/:sub/remove', async (c) =>
+    (await admin.removeMemberOverride(deps, c.get('actor'), id(c, 'cid'), subParam(c), await body(c, admin.ModerationInput)), c.json({ ok: true })),
+  );
+  app.get('/admin/reports', async (c) => {
+    const st = c.req.query('status');
+    return c.json(await admin.listReports(deps, c.get('actor'), st === 'RESOLVED' || st === 'ALL' ? st : 'OPEN'));
+  });
+  app.post('/admin/reports/:rid/resolve', async (c) => (await admin.resolveReport(deps, c.get('actor'), id(c, 'rid'), await body(c, admin.ResolveReportInput)), c.json({ ok: true })));
+  app.get('/admin/audit', async (c) => {
+    await admin.requireAdmin(deps, c.get('actor'));
+    const before = c.req.query('before');
+    return c.json(await listAudit(deps, { ...(before && /^[0-9TZ:.\-#A-Z]{10,80}$/.test(before) ? { before } : {}), limit: 50 }));
   });
 
   // ------------------------------------------------------------- floorplans
