@@ -34,4 +34,4 @@ Structured JSON logs. Never log tokens, presigned URLs, or message bodies. Event
 
 ## Headers
 
-`amplify.yml` sets HSTS, nosniff, frame-deny, referrer policy, permissions policy, and a CSP without `unsafe-eval`.
+`customHttp.yml` sets HSTS, nosniff, frame-deny, referrer policy, permissions policy, and a CSP without `unsafe-eval`.
