@@ -26,7 +26,7 @@ Rate limits: invite create/preview/accept, uploads, chat (40/min), dice (60/min)
 - Presence rate limiting in Lambda is per warm container, not global.
 - Cognito tokens are stored by Amplify in localStorage by default. Consider cookie storage plus a CSP review before launch.
 - Admin dashboard, moderation, reports and audit log are not built yet. The bootstrap script exists.
-- The AppSync Events Lambda handler is verified live for authorised subscribes and presence publishes. Its **denial path** (e.g. a removed member re-subscribing) has only been tested locally; confirm it on AWS before launch.
+- The AppSync Events Lambda handler is verified live on AWS, including denial: a removed member stops receiving updates and cannot resubscribe.
 
 ## Logging
 

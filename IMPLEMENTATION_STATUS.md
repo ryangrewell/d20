@@ -46,7 +46,7 @@ The spec's **first deliverable works locally end to end** and is covered by an a
 - [x] C05 Named, coloured cursors (12 Hz throttle) and pings
 - [x] C06 Fog reveal/conceal (rect + brush), persisted ops, reset. S3 checkpoints not built
 - [~] C07 Snapshot-based reconnect/resync. `getEventsSince` exists but the client doesn't use it
-- [x] C08 Epoch rotation on member removal + negative tests
+- [x] C08 Epoch rotation on member removal + negative tests (verified live)
 
 **Epic D — Gameplay** (MPO)
 - [x] D01 Declarative, versioned adapter contract + generic-d20 adapter
@@ -62,7 +62,7 @@ The spec's **first deliverable works locally end to end** and is covered by an a
 
 ## Active risks
 
-1. **AppSync Events denial path not yet observed live.** Two-player play on d20.ryangrewell.com confirmed authorised subscribes, IAM publish of game events and presence re-stamping. Rejection of an unauthorised subscribe (e.g. a removed member) has only been tested locally.
+1. ~~AppSync Events contract~~ Verified live on d20.ryangrewell.com (2026-10-27): authorised subscribes, IAM publish of game events, presence re-stamping, and a removed member being cut off (subscribe denial + epoch rotation).
 2. **No outbox.** A failed publish after a committed write is only healed on the client's next resync. Planned fix: DynamoDB Streams publisher.
 3. **Map images are visible to players** (documented; `strictFog` is future work).
 4. Concurrent non-ended sessions on the same scene only notify the session that issued the command.
@@ -71,10 +71,9 @@ The spec's **first deliverable works locally end to end** and is covered by an a
 
 ## Next tasks
 
-1. Confirm live that a removed member stops receiving updates (subscribe denial and epoch rotation on AWS).
-2. Remaining Phase 4 polish: encounter templates (groups of creatures), chat history pagination, journal/handouts.
-3. Outbox publisher; GM undo for recent reversible commands; scene checkpoints.
-4. Phase 5 interior generator; Phase 6 delegation API/UI, admin dashboard, audit.
+1. Remaining Phase 4 polish: encounter templates (groups of creatures), chat history pagination, journal/handouts.
+2. Outbox publisher; GM undo for recent reversible commands; scene checkpoints.
+3. Phase 5 interior generator; Phase 6 delegation API/UI, admin dashboard, audit.
 
 ## Manual AWS actions required
 
