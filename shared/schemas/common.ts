@@ -36,6 +36,7 @@ export const GridSchema = z.object({
   snapEnabled: z.boolean(),
   showEnabled: z.boolean(),
   opacity: z.number().min(0).max(1),
+  color: z.string().regex(/^#[0-9a-f]{6}$/i, 'Use a #rrggbb color').optional(),
 });
 
 export const CalibrationSchema = z.object({

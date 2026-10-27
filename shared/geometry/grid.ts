@@ -16,6 +16,8 @@ export type MapGrid = {
   snapEnabled: boolean;
   showEnabled: boolean;
   opacity: number;
+  /** Line color as #rrggbb; white when unset. */
+  color?: string;
 };
 
 /** Grid lines closer than this on screen are hidden to avoid moiré. */
@@ -96,3 +98,12 @@ export const DEFAULT_GRID: MapGrid = {
   showEnabled: true,
   opacity: 0.35,
 };
+
+export const DEFAULT_GRID_COLOR = '#ffffff';
+
+/** Quick picks in map setup: white and black cover most maps, the rest stand out on busy art. */
+export const GRID_COLOR_PRESETS = ['#ffffff', '#000000', '#3a2d22', '#e0b84a', '#5ef2ff', '#ff4d6d'] as const;
+
+export function gridColorNumber(grid: Pick<MapGrid, 'color'>): number {
+  return parseInt((grid.color ?? DEFAULT_GRID_COLOR).slice(1), 16);
+}

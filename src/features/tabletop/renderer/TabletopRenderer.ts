@@ -7,7 +7,7 @@
 import 'pixi.js/unsafe-eval';
 import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import { mapToScreen, type Camera, type Point } from '@shared/geometry/transform';
-import { gridSpacingPixels, shouldDrawGrid } from '@shared/geometry/grid';
+import { gridColorNumber, gridSpacingPixels, shouldDrawGrid } from '@shared/geometry/grid';
 import { hexGridPolygons, squareGridSegments } from '@shared/geometry/gridLines';
 import type { FogOp, FogShape, FogState } from '@shared/fog';
 import type { MapDefinition } from '@shared/model';
@@ -127,7 +127,7 @@ export class TabletopRenderer {
     } else {
       for (const poly of hexGridPolygons(map.grid, spacing, view)) g.poly(poly.flatMap((p) => [p.x, p.y]), true);
     }
-    g.stroke({ width, color: 0xffffff, alpha: map.grid.opacity });
+    g.stroke({ width, color: gridColorNumber(map.grid), alpha: map.grid.opacity });
   }
 
   // ------------------------------------------------------------------ fog

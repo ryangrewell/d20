@@ -14,6 +14,9 @@ export const BUILDING_TYPES = ['residence', 'townhouse', 'tavern', 'inn', 'shop'
 export type BuildingType = (typeof BUILDING_TYPES)[number];
 export const THEMES = ['medieval', 'fantasy', 'modern', 'industrial', 'scifi'] as const;
 export type Theme = (typeof THEMES)[number];
+
+/** Grid line color for each theme's floor: dark lines on the light floors, light on sci-fi. */
+export const THEME_GRID_COLORS: Record<Theme, string> = { medieval: '#3a2d22', fantasy: '#2f3a2a', modern: '#2a2a2a', industrial: '#2f3439', scifi: '#7fd3ea' };
 export type Density = 'sparse' | 'normal' | 'dense';
 
 export type FloorplanInput = {

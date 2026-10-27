@@ -7,7 +7,7 @@
 import { ulid } from 'ulid';
 import { z } from 'zod';
 import { invalid } from '@shared/errors';
-import { BUILDING_TYPES, FloorplanError, THEMES, generateFloorplan, validateFloorplan, type Floorplan, type FloorplanInput } from '@shared/generator/floorplan';
+import { BUILDING_TYPES, FloorplanError, THEMES, THEME_GRID_COLORS, generateFloorplan, validateFloorplan, type Floorplan, type FloorplanInput } from '@shared/generator/floorplan';
 import type { MapDefinition, Scene, SceneObject } from '@shared/model';
 import { Id, plainText } from '@shared/schemas/common';
 import { keys, type TxItem } from '../repo/db';
@@ -90,7 +90,7 @@ export async function createFloorplan(deps: Deps, actor: Actor, campaignId: stri
       widthPx: width,
       heightPx: height,
       calibration: { a: { x: 0, y: 0 }, b: { x: width, y: 0 }, enteredDistance: body.input.width, enteredUnit: unitLabel, pixelsPerMeter: width / fp.widthM },
-      grid: { type: 'square', intervalMeters: fp.cellM, displayInterval: unitLabel === 'ft' ? 5 : 1.5, displayUnit: unitLabel, originX: 0, originY: 0, rotationRadians: 0, snapEnabled: true, showEnabled: true, opacity: 0.2 },
+      grid: { type: 'square', intervalMeters: fp.cellM, displayInterval: unitLabel === 'ft' ? 5 : 1.5, displayUnit: unitLabel, originX: 0, originY: 0, rotationRadians: 0, snapEnabled: true, showEnabled: true, opacity: 0.7, color: THEME_GRID_COLORS[body.input.theme] },
       createdAt: now,
       updatedAt: now,
     };

@@ -52,7 +52,7 @@ d('building interior generator (J8)', () => {
       // The ruler across the image reads exactly the requested 60 ft; the depth reads 40 ft.
       expect(fromMeters(map.widthPx / map.calibration.pixelsPerMeter, 'ft')).toBeCloseTo(60, 6);
       expect(fromMeters(map.heightPx / map.calibration.pixelsPerMeter, 'ft')).toBeCloseTo(40, 1);
-      expect(map.grid).toMatchObject({ type: 'square', displayInterval: 5, displayUnit: 'ft' });
+      expect(map.grid).toMatchObject({ type: 'square', displayInterval: 5, displayUnit: 'ft', opacity: 0.7, color: '#3a2d22' });
       expect(map.grid.intervalMeters).toBeCloseTo(fp.cellM, 6);
     }
     expect(dash.scenes.filter((s: { name: string }) => s.name.startsWith('Broken Crown'))).toHaveLength(3);

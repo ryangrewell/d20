@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Crosshair, Hand, Maximize, Move, Ruler } from 'lucide-react';
 import { toast } from 'sonner';
 import { computeCalibration, distance, mapToScreen, type Point, CalibrationError } from '@shared/geometry/transform';
-import { gridSpacingPixels, shouldDrawGrid, type GridType, type MapGrid } from '@shared/geometry/grid';
+import { DEFAULT_GRID_COLOR, GRID_COLOR_PRESETS, gridSpacingPixels, shouldDrawGrid, type GridType, type MapGrid } from '@shared/geometry/grid';
 import { hexGridPolygons, squareGridSegments } from '@shared/geometry/gridLines';
 import { DISTANCE_UNITS, formatDistance, toMeters, UNIT_LABELS, type DistanceUnit } from '@shared/units';
 import type { MapDefinition } from '@shared/model';
@@ -206,6 +206,29 @@ function MapSetup({ campaignId, map, imageUrl }: { campaignId: string; map: MapD
           <Field label={`Grid opacity (${Math.round(grid.opacity * 100)}%)`} htmlFor="opacity">
             <input id="opacity" type="range" min={0.05} max={1} step={0.05} value={grid.opacity} onChange={(e) => setGrid((g) => ({ ...g, opacity: Number(e.target.value) }))} className="w-full accent-[var(--color-accent)]" />
           </Field>
+          <fieldset>
+            <legend className="mb-1 text-sm font-medium">Grid color</legend>
+            <div className="flex flex-wrap items-center gap-2">
+              {GRID_COLOR_PRESETS.map((c) => {
+                const on = (grid.color ?? DEFAULT_GRID_COLOR).toLowerCase() === c;
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    aria-label={`Grid color ${c}`}
+                    aria-pressed={on}
+                    onClick={() => setGrid((g) => ({ ...g, color: c }))}
+                    className={`h-7 w-7 rounded-full border-2 ${on ? 'border-accent ring-2 ring-accent/40' : 'border-border'}`}
+                    style={{ backgroundColor: c }}
+                  />
+                );
+              })}
+              <label className="flex items-center gap-1 text-xs text-muted">
+                <input type="color" aria-label="Custom grid color" value={grid.color ?? DEFAULT_GRID_COLOR} onChange={(e) => setGrid((g) => ({ ...g, color: e.target.value }))} className="h-7 w-9 cursor-pointer rounded border border-border bg-transparent" />
+                Custom
+              </label>
+            </div>
+          </fieldset>
           <Field label={`Rotation (${((grid.rotationRadians * 180) / Math.PI).toFixed(1)}°)`} htmlFor="rotation">
             <input id="rotation" type="range" min={-45} max={45} step={0.5} value={(grid.rotationRadians * 180) / Math.PI} onChange={(e) => setGrid((g) => ({ ...g, rotationRadians: (Number(e.target.value) * Math.PI) / 180 }))} className="w-full accent-[var(--color-accent)]" />
           </Field>
@@ -262,7 +285,7 @@ function MapSetup({ campaignId, map, imageUrl }: { campaignId: string; map: MapD
             <div className="grid h-full place-items-center text-sm text-muted">The map image could not be loaded.</div>
           )}
           <svg className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden>
-            <g transform={`translate(${-cam.x * cam.zoom} ${-cam.y * cam.zoom}) scale(${cam.zoom})`} stroke="white" strokeOpacity={grid.opacity} fill="none">
+            <g transform={`translate(${-cam.x * cam.zoom} ${-cam.y * cam.zoom}) scale(${cam.zoom})`} stroke={grid.color ?? DEFAULT_GRID_COLOR} strokeOpacity={grid.opacity} fill="none">
               {segments.map(([p, q], i) => (
                 <line key={i} x1={p.x} y1={p.y} x2={q.x} y2={q.y} vectorEffect="non-scaling-stroke" strokeWidth={1} />
               ))}

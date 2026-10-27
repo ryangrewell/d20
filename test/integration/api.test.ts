@@ -91,9 +91,10 @@ d('campaign lifecycle, tabletop and security', () => {
     expect(noCal.status).toBe(400);
     const cal = await gm.call('PATCH', `/campaigns/${campaignId}/maps/${mapId}`, {
       calibration: { a: { x: 0, y: 10 }, b: { x: 400, y: 10 }, enteredDistance: 1, enteredUnit: 'mi', pixelsPerMeter: 400 / 1609.344 },
-      grid: { type: 'square', intervalMeters: 30.48, displayInterval: 100, displayUnit: 'ft', originX: 0, originY: 0, rotationRadians: 0, snapEnabled: true, showEnabled: true, opacity: 0.3 },
+      grid: { type: 'square', intervalMeters: 30.48, displayInterval: 100, displayUnit: 'ft', originX: 0, originY: 0, rotationRadians: 0, snapEnabled: true, showEnabled: true, opacity: 0.3, color: '#E0B84A' },
     });
     expect(cal.status).toBe(200);
+    expect(cal.body.grid.color).toBe('#E0B84A');
     expect(cal.body.calibration.pixelsPerMeter).toBeCloseTo(0.24855, 4);
   });
 
