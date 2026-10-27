@@ -13,7 +13,7 @@ The spec's **first deliverable works locally end to end** and is covered by an a
 | `tsc -b` (app, server, scripts, tests) + `tsc -p amplify` | pass |
 | `eslint .` | pass |
 | Unit tests (19) | pass |
-| Integration tests vs DynamoDB Local + MinIO (15) | pass |
+| Integration tests vs DynamoDB Local + MinIO (16) | pass |
 | Playwright first-deliverable journey (1) | pass |
 | `vite build` | pass |
 | `cdk synth` of Amplify backend (offline) | pass |
@@ -34,7 +34,7 @@ The spec's **first deliverable works locally end to end** and is covered by an a
 - [x] B03 Pan/zoom camera + native-coordinate transform library
 - [x] B04 Square/hex/none grid, spacing, origin, rotation, opacity, snapping, moiré suppression
 - [x] B05 Ruler + calibration math tests
-- [~] B06 Scenes and live-scene switching done. Hierarchy/breadcrumbs and portals not built
+- [~] B06 Scenes, live-scene switching, and GM token transfer between scenes (`transferSceneObject`) done. Hierarchy/breadcrumbs and portals not built
 - [x] B07 Token spawn/move/update/delete with ownership checks
 - [~] B08 Shared Display (player projection, no GM UI). Named-player preview exists in the API (`?as=<sub>`) but has no UI
 

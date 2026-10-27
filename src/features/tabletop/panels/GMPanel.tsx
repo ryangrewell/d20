@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Eye, EyeOff, Trash2, Users } from 'lucide-react';
+import { ArrowRightLeft, Eye, EyeOff, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import type { SceneObject } from '@shared/model';
 import { Button, Field, Input, Select, cn } from '@/components/ui/primitives';
+import { useCampaign } from '@/lib/api/hooks';
 import { setTable, useTable, type SpawnTemplate } from '../store';
 import type { SyncEngine } from '../sync';
 
@@ -114,6 +115,7 @@ function Inspector({ obj, engine, players }: { obj: SceneObject; engine: SyncEng
           <Trash2 className="h-4 w-4" aria-hidden />
         </Button>
       </div>
+      <MoveToScene obj={obj} engine={engine} />
       <Field label="Controlled by" htmlFor="objCtrl">
         <Select id="objCtrl" className="h-8 text-xs" value={obj.assignedControllerSub ?? ''} onChange={(e) => void update({ assignedControllerSub: e.target.value || null })}>
           <option value="">GM only</option>
@@ -162,5 +164,47 @@ function Inspector({ obj, engine, players }: { obj: SceneObject; engine: SyncEng
         />
       </Field>
     </section>
+  );
+}
+
+function MoveToScene({ obj, engine }: { obj: SceneObject; engine: SyncEngine }) {
+  const campaignId = useTable((s) => s.snapshot?.campaign.id ?? '');
+  const { data } = useCampaign(campaignId);
+  const [busy, setBusy] = useState(false);
+  const others = (data?.scenes ?? []).filter((s) => s.id !== obj.sceneId);
+  if (!others.length) return null;
+  return (
+    <Field label="Move to scene" htmlFor="objMove" hint="Keeps the token's controller and look. It lands in the centre of that map.">
+      <div className="flex items-center gap-2">
+        <ArrowRightLeft className="h-4 w-4 shrink-0 text-muted" aria-hidden />
+        <Select
+          id="objMove"
+          className="h-8 text-xs"
+          value=""
+          disabled={busy}
+          onChange={async (e) => {
+            const target = others.find((s) => s.id === e.target.value);
+            if (!target) return;
+            setBusy(true);
+            try {
+              await engine.command('transferSceneObject', { objectId: obj.id, targetSceneId: target.id });
+              setTable({ selectedId: null });
+              toast.success(`${obj.appearance.label || 'Token'} moved to ${target.name}`);
+            } catch (err) {
+              toast.error((err as Error).message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <option value="">Choose a scene…</option>
+          {others.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </Select>
+      </div>
+    </Field>
   );
 }

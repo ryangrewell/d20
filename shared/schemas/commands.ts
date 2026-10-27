@@ -42,6 +42,8 @@ export const CommandPayloads = {
       .partial(),
   }),
   removeSceneObject: z.object({ objectId: Id }),
+  /** GM moves a token to another scene, keeping its id, controller and appearance. Omit x/y to drop it at the map centre. */
+  transferSceneObject: z.object({ objectId: Id, targetSceneId: Id, x: z.number().finite().optional(), y: z.number().finite().optional() }),
   updateFog: z.object({ sceneId: Id, op: FogOpSchema }),
   resetFog: z.object({ sceneId: Id, initial: z.enum(['covered', 'revealed']) }),
   switchActiveScene: z.object({ sceneId: Id }),

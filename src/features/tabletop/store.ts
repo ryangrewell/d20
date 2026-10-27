@@ -69,4 +69,4 @@ export const setTable = useTable.setState;
 export const getTable = useTable.getState;
 
 // Development-only hook so end-to-end tests can read canvas state.
-if (import.meta.env.DEV) (window as unknown as { __d20?: unknown }).__d20 = { getTable };
+if (import.meta.env.DEV) (window as unknown as { __d20?: unknown }).__d20 = { getTable, setTable };

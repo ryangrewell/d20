@@ -179,6 +179,37 @@ d('campaign lifecycle, tabletop and security', () => {
     expect(s3.body.scene.objects.map((o: { appearance: { label?: string } }) => o.appearance.label)).toContain('Shopkeeper');
   });
 
+  it('moves a token to another scene as one GM action', async () => {
+    const other = await gm.call('POST', `/campaigns/${campaignId}/scenes`, { mapId, name: 'Cellar', fogInitial: 'revealed' });
+    const spawned = await gm.command(sessionId, 'spawnSceneObject', { sceneId, objectType: 'NPC', x: 30, y: 30, label: 'Courier', assignedControllerSub: alice.sub });
+    const courierId = spawned.body.result.objectId as string;
+
+    expect((await alice.command(sessionId, 'transferSceneObject', { objectId: courierId, targetSceneId: other.body.id })).status).toBe(403);
+    expect((await gm.command(sessionId, 'transferSceneObject', { objectId: courierId, targetSceneId: sceneId })).status).toBe(400);
+    expect((await gm.command(sessionId, 'transferSceneObject', { objectId: courierId, targetSceneId: '01ZZZZZZZZZZZZZZZZZZZZZZZZ' })).status).toBe(404);
+
+    h.published.length = 0;
+    const moved = await gm.command(sessionId, 'transferSceneObject', { objectId: courierId, targetSceneId: other.body.id });
+    expect(moved.status).toBe(200);
+    // Lands at the centre of the 400x300 map, same id and controller.
+    expect(moved.body.result).toMatchObject({ objectId: courierId, sceneId: other.body.id, x: 200, y: 150 });
+
+    // Players on the active scene see it leave; the inactive destination scene is not leaked to them.
+    const aliceItems = h.published.filter((p) => p.channel.endsWith(`/user/${alice.sub}`)).flatMap((p) => p.event.items);
+    expect(aliceItems).toEqual([{ type: 'SCENE_OBJECT_REMOVED', sceneId, objectId: courierId }]);
+
+    const src = await gm.call('GET', `/sessions/${sessionId}/snapshot`);
+    expect(src.body.scene.objects.map((o: { id: string }) => o.id)).not.toContain(courierId);
+    const dst = await gm.call('GET', `/sessions/${sessionId}/snapshot?scene=${other.body.id}`);
+    expect(dst.body.scene.objects.find((o: { id: string }) => o.id === courierId)).toMatchObject({ assignedControllerSub: alice.sub, appearance: { label: 'Courier' } });
+
+    // Once the GM switches scenes, the controlling player sees it there.
+    await gm.command(sessionId, 'switchActiveScene', { sceneId: other.body.id });
+    const aliceView = await alice.call('GET', `/sessions/${sessionId}/snapshot`);
+    expect(aliceView.body.scene.objects.map((o: { id: string }) => o.id)).toContain(courierId);
+    await gm.command(sessionId, 'switchActiveScene', { sceneId });
+  });
+
   it('delivers whispers only to recipients (J4, negative test 6)', async () => {
     h.published.length = 0;
     const w = await gm.command(sessionId, 'sendChat', { body: 'The amulet is cursed.', recipientSubs: [alice.sub] });

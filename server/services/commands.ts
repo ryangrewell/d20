@@ -151,6 +151,42 @@ const handlers: { [K in CommandType]: Handler<K> } = {
     return { changes: [{ kind: 'object', before: obj, fog }], writes: [{ Delete: { Key: keys.object(obj.sceneId, obj.id) } }] };
   },
 
+  async transferSceneObject(ctx, p) {
+    requireGM(ctx);
+    requirePlayable(ctx);
+    const { obj, scene: source, fog: sourceFog } = await loadObjectFor(ctx, p.objectId, await findObjectScene(ctx, p.objectId));
+    if (p.targetSceneId === source.id) throw invalid('That token is already in this scene.');
+    const target = await loadSceneFor(ctx, p.targetSceneId);
+    const [targetObjects, { fog: targetFog }, targetMap] = await Promise.all([
+      loadSceneObjects(ctx.deps, target.id),
+      loadFog(ctx.deps, target),
+      ctx.deps.db.get<MapDefinition>(keys.map(target.campaignId, target.mapId)),
+    ]);
+    if (targetObjects.length >= MAX_OBJECTS_PER_SCENE) throw invalid(`A scene can hold at most ${MAX_OBJECTS_PER_SCENE} objects.`);
+    const fallback = targetMap ? { x: targetMap.widthPx / 2, y: targetMap.heightPx / 2 } : { x: 0, y: 0 };
+    const pos = await clampToMap(ctx, target, p.x ?? fallback.x, p.y ?? fallback.y);
+    const after: SceneObject = {
+      ...obj,
+      ...pos,
+      sceneId: target.id,
+      zIndex: targetObjects.reduce((m, o) => Math.max(m, o.zIndex), 0) + 1,
+      revision: obj.revision + 1,
+      updatedAt: ctx.deps.now().toISOString(),
+    };
+    return {
+      // Leaves the source scene and appears in the target; each audience sees whichever side it may see.
+      changes: [
+        { kind: 'object', before: obj, fog: sourceFog },
+        { kind: 'object', after, fog: targetFog },
+      ],
+      writes: [
+        { Delete: { Key: keys.object(source.id, obj.id), ConditionExpression: 'revision = :rev', ExpressionAttributeValues: { ':rev': obj.revision } } },
+        { Put: { Item: objectItem(after), ConditionExpression: 'attribute_not_exists(PK)' } },
+      ],
+      result: { objectId: obj.id, sceneId: target.id, x: after.x, y: after.y },
+    };
+  },
+
   async updateFog(ctx, p) {
     requireGM(ctx);
     requirePlayable(ctx);

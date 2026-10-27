@@ -36,6 +36,7 @@ All routes are under `/api`. They need `Authorization: Bearer <Cognito ID token>
 | `spawnSceneObject` | GM | `sceneId, objectType, x, y, label?, tint?, sizeMeters?, visibility, allowedViewerIds?, assignedControllerSub?, gmNotes?` |
 | `updateSceneObject` | GM | `objectId, patch{…}` |
 | `removeSceneObject` | GM | `objectId` |
+| `transferSceneObject` | GM | `objectId, targetSceneId, x?, y?` (defaults to the target map's centre; keeps id, controller, appearance) |
 | `updateFog` | GM | `sceneId, op{ mode, shape: rect\|polygon\|brush }` |
 | `resetFog` | GM | `sceneId, initial` |
 | `switchActiveScene` | GM | `sceneId` |
