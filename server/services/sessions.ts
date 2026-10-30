@@ -13,7 +13,7 @@ import { loadCampaign, loadSession, requireActiveCampaign, requireGM, type Actor
 import { commit, sessionAudience } from './commit';
 import { listMembers } from './campaigns';
 import { visibleMessages } from './chat';
-import { loadLayers } from './lighting';
+import { encodeLights, loadLayers } from './lighting';
 import { loadMapWalls } from './mapWalls';
 
 function sessionItem(s: GameSession) {
@@ -133,7 +133,7 @@ export async function loadFog(deps: Deps, scene: Scene, opts: { objects?: SceneO
   return { fog: { initial: scene.fogInitial, ops: ops.map((o) => o.op), ...layers }, seq: ops.at(-1)?.seq ?? 0 };
 }
 
-export const fogWire = (fog: FogState): FogWire => ({ initial: fog.initial, ops: fog.ops, explored: fog.explored ? encodeExplored(fog.explored) : null, lights: fog.lights ?? [] });
+export const fogWire = (fog: FogState): FogWire => ({ initial: fog.initial, ops: fog.ops, explored: fog.explored ? encodeExplored(fog.explored) : null, lights: encodeLights(fog.lights) });
 
 export async function loadSceneObjects(deps: Deps, sceneId: string) {
   return deps.db.queryPrefix<SceneObject>(`SCENE#${sceneId}`, 'OBJ#');

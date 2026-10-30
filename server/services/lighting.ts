@@ -7,6 +7,7 @@ import type { Point } from '@shared/geometry/transform';
 import type { FogShape, FogState } from '@shared/fog';
 import { createExplored, decodeExplored, encodeExplored, markPolygon, type ExploredGrid } from '@shared/lighting/explored';
 import { isPartyToken, lightPolygon, partyLights } from '@shared/lighting/light';
+import { encodePolygon } from '@shared/lighting/wire';
 import { roomsContaining, wallSegments, type MapWalls, type Segment } from '@shared/lighting/walls';
 import type { MapDefinition, Scene, SceneObject } from '@shared/model';
 import { keys, type TxItem } from '../repo/db';
@@ -15,6 +16,9 @@ import type { Change } from '../realtime/fanout';
 import { loadMapWalls } from './mapWalls';
 
 const MAX_PATH_SAMPLES = 40;
+
+/** Light shapes as they travel to clients. */
+export const encodeLights = (lights: FogShape[] | undefined) => (lights ?? []).flatMap((l) => (l.kind === 'polygon' ? [encodePolygon(l.points)] : []));
 
 export type ExploredRecord = { encoded: string; version: number };
 export type SceneGeometry = {
@@ -154,7 +158,7 @@ export async function lightingUpdate(
       fogBefore,
       fogAfter,
       explored: grid ? encodeExplored(grid) : null,
-      lights: lights ?? [],
+      lights: encodeLights(lights),
     },
     write,
     fogAfter,

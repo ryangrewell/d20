@@ -7,6 +7,7 @@
  */
 import type { Point } from '../geometry/transform';
 import { pointInPolygon } from '../fog';
+import { pushVarint, toBase64, varintReader } from './wire';
 
 export type ExploredGrid = { cellPx: number; cols: number; rows: number; stamps: Uint16Array };
 
@@ -71,20 +72,6 @@ export function forEachExploredRun(g: ExploredGrid, fn: (row: number, c0: number
   }
 }
 
-function pushVarint(out: number[], n: number) {
-  while (n >= 0x80) {
-    out.push((n & 0x7f) | 0x80);
-    n >>>= 7;
-  }
-  out.push(n);
-}
-
-function toBase64(bytes: number[]): string {
-  let s = '';
-  for (const b of bytes) s += String.fromCharCode(b);
-  return btoa(s);
-}
-
 /** Format marker, cellPx, cols, rows, then (stamp, run length) pairs over the cells, as varints, base64. */
 export function encodeExplored(g: ExploredGrid): string {
   const out: number[] = [];
@@ -103,18 +90,7 @@ export function encodeExplored(g: ExploredGrid): string {
 }
 
 export function decodeExplored(s: string): ExploredGrid {
-  const bin = atob(s);
-  let pos = 0;
-  const read = () => {
-    let n = 0;
-    let shift = 0;
-    for (;;) {
-      const b = bin.charCodeAt(pos++);
-      n |= (b & 0x7f) << shift;
-      if (b < 0x80) return n >>> 0;
-      shift += 7;
-    }
-  };
+  const { read, done } = varintReader(s);
   const first = read();
   const stamped = first === FORMAT_STAMPED;
   const cellPx = stamped ? read() : first;
@@ -123,7 +99,7 @@ export function decodeExplored(s: string): ExploredGrid {
   const g: ExploredGrid = { cellPx, cols, rows, stamps: new Uint16Array(cols * rows) };
   let i = 0;
   if (stamped) {
-    while (pos < bin.length) {
+    while (!done()) {
       const v = read();
       const run = read();
       if (v) g.stamps.fill(v, i, i + run);
@@ -133,7 +109,7 @@ export function decodeExplored(s: string): ExploredGrid {
   }
   // Earlier format: alternating unexplored/explored run lengths. Treat it as explored before any GM fog.
   let on = false;
-  while (pos < bin.length) {
+  while (!done()) {
     const run = read();
     if (on) g.stamps.fill(1, i, i + run);
     i += run;

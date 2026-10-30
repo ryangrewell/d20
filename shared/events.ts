@@ -42,8 +42,8 @@ export function parseChannel(path: string): ChannelRef | null {
 export type ActorStamp = { sub: string; displayName: string };
 
 export type DurableEventBody =
-  /** Automatic fog layers changed: explored area (encoded grid) and current torchlight. */
-  | { type: 'FOG_LAYERS'; sceneId: string; explored: string | null; lights: FogShape[] }
+  /** Automatic fog layers changed: explored area (encoded grid) and current torchlight (encoded polygons, see lighting/wire). */
+  | { type: 'FOG_LAYERS'; sceneId: string; explored: string | null; lights: string[] }
   | { type: 'SESSION_UPDATED'; session: PublicSession }
   | { type: 'ACTIVE_SCENE_CHANGED'; sceneId: string }
   | { type: 'SCENE_UPDATED'; scene: PublicScene }
@@ -59,7 +59,7 @@ export type DurableEventBody =
   /** Sent only to viewers who may read the entry; `shared` true when it was just shared with them. */
   | { type: 'JOURNAL_UPDATED'; entryId: string; title: string; shared: boolean }
   /** A scene changed in bulk (undo of fog, checkpoint restore); viewers refetch their snapshot. */
-  | { type: 'SCENE_REFRESH'; sceneId: string; reason: 'undo' | 'checkpoint' }
+  | { type: 'SCENE_REFRESH'; sceneId: string; reason: 'undo' | 'checkpoint' | 'lighting' }
   | { type: 'ACCESS_CHANGED'; reason: 'epoch-rotated' | 'member-removed' };
 
 /**

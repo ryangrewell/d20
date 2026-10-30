@@ -7,7 +7,7 @@
  *   - shared channel: the common player projection (Shared Display)
  * so a hidden object never travels on a channel a player can subscribe to.
  */
-import type { FogOp, FogShape, FogState } from '@shared/fog';
+import type { FogOp, FogState } from '@shared/fog';
 import { channelPath, type ActorStamp, type DurableEvent, type DurableEventBody } from '@shared/events';
 import type { ChatMessage, GameSession, InitiativeState, PresenterFocus, Scene, SceneObject } from '@shared/model';
 import { canViewerSeeObject, publicInitiative, publicObject, publicScene, publicSession, SHARED_VIEWER, type Viewer } from '@shared/projection';
@@ -16,7 +16,7 @@ export type Change =
   | { kind: 'object'; before?: SceneObject; after?: SceneObject; fog: FogState }
   | { kind: 'fog'; sceneId: string; seq: number; op: FogOp; objects: SceneObject[]; fogBefore: FogState; fogAfter: FogState }
   | { kind: 'fogReset'; sceneId: string; initial: 'covered' | 'revealed'; objects: SceneObject[]; fogBefore: FogState; fogAfter: FogState }
-  | { kind: 'fogLayers'; sceneId: string; objects: SceneObject[]; fogBefore: FogState; fogAfter: FogState; explored: string | null; lights: FogShape[] }
+  | { kind: 'fogLayers'; sceneId: string; objects: SceneObject[]; fogBefore: FogState; fogAfter: FogState; explored: string | null; lights: string[] }
   | { kind: 'session'; session: GameSession }
   | { kind: 'activeScene'; sceneId: string }
   | { kind: 'scene'; scene: Scene }
@@ -24,7 +24,7 @@ export type Change =
   | { kind: 'focus'; focus: PresenterFocus }
   | { kind: 'initiative'; state: InitiativeState }
   | { kind: 'character'; characterId: string; ownerSub: string }
-  | { kind: 'sceneRefresh'; sceneId: string; reason: 'undo' | 'checkpoint' }
+  | { kind: 'sceneRefresh'; sceneId: string; reason: 'undo' | 'checkpoint' | 'lighting' }
   | { kind: 'journal'; entryId: string; title: string; readers: 'ALL' | 'GM_ONLY' | string[]; newlyShared: boolean }
   | { kind: 'access'; reason: 'epoch-rotated' | 'member-removed' };
 
@@ -131,7 +131,22 @@ export function buildBundles(
     const items = changes.flatMap((c) => projectChange(c, t.audience, session.activeSceneId));
     if (items.length) out.push({ ...t, event: { ...meta, sessionId: session.id, items } });
   }
-  return out;
+  return fitForStorage(out);
+}
+
+/** The event is stored with a copy per audience in one item (400 KB limit); stay well under it. */
+const MAX_EVENT_BYTES = 300_000;
+
+/**
+ * Large fog layers (a big explored area, many lights) times many viewers can outgrow one stored
+ * event. Then viewers get a scene reload instead, which fetches the layers in their snapshot.
+ */
+function fitForStorage(bundles: AudienceBundle[]): AudienceBundle[] {
+  if (JSON.stringify(bundles).length <= MAX_EVENT_BYTES) return bundles;
+  return bundles.map((b) => ({
+    ...b,
+    event: { ...b.event, items: b.event.items.map((i): DurableEventBody => (i.type === 'FOG_LAYERS' ? { type: 'SCENE_REFRESH', sceneId: i.sceneId, reason: 'lighting' } : i)) },
+  }));
 }
 
 /** Serialisable per-audience record stored with the session event for replay. */

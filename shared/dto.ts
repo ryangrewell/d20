@@ -1,8 +1,8 @@
 /** API response shapes shared by server and client. */
-import type { FogOp, FogShape } from './fog';
+import type { FogOp } from './fog';
 
-/** Fog as sent to clients: the explored grid travels encoded (see shared/lighting/explored). */
-export type FogWire = { initial: 'covered' | 'revealed'; ops: FogOp[]; explored: string | null; lights: FogShape[] };
+/** Fog as sent to clients: the explored grid and light polygons travel encoded (see shared/lighting). */
+export type FogWire = { initial: 'covered' | 'revealed'; ops: FogOp[]; explored: string | null; lights: string[] };
 import type { Campaign, CampaignInvite, CampaignRole, CampaignSettings, ChatMessage, GameSession, MapDefinition, Scene, SceneObject } from './model';
 import type { PublicScene, PublicSceneObject, PublicSession } from './projection';
 

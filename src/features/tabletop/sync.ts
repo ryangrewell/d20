@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import type { FogWire, SessionSnapshotDto } from '@shared/dto';
 import type { FogShape, FogState } from '@shared/fog';
 import { decodeExplored } from '@shared/lighting/explored';
+import { decodePolygon } from '@shared/lighting/wire';
 import type { DurableEvent, DurableEventBody, PresenceEvent } from '@shared/events';
 import type { CommandResult, CommandType, CommandInput } from '@shared/schemas/commands';
 import type { CursorPacket } from '@shared/model';
@@ -26,8 +27,9 @@ const CATCH_UP_MS = 20_000;
 const CATCH_UP_OVERLAP = 25;
 
 /** Decodes the automatic fog layers as they travel (explored grid encoded). */
-function layersFromWire(w: { explored: string | null; lights: FogShape[] }): Pick<FogState, 'explored' | 'lights'> {
-  return { ...(w.explored ? { explored: decodeExplored(w.explored) } : {}), ...(w.lights.length ? { lights: w.lights } : {}) };
+function layersFromWire(w: { explored: string | null; lights: string[] }): Pick<FogState, 'explored' | 'lights'> {
+  const lights: FogShape[] = w.lights.map((s) => ({ kind: 'polygon', points: decodePolygon(s) }));
+  return { ...(w.explored ? { explored: decodeExplored(w.explored) } : {}), ...(lights.length ? { lights } : {}) };
 }
 
 const fogFromWire = (w: FogWire): FogState => ({ initial: w.initial, ops: w.ops, ...layersFromWire(w) });
