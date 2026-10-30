@@ -3,6 +3,9 @@ import { ArrowRightLeft, Eye, EyeOff, Heart, Plus, Trash2, Users, X, Zap } from 
 import { QuickEncounterDialog } from '@/features/campaigns/QuickEncounterDialog';
 import { toast } from 'sonner';
 import type { SceneObject } from '@shared/model';
+import { isPartyToken } from '@shared/lighting/light';
+import { fromMeters, toMeters } from '@shared/units';
+import { Link } from 'react-router-dom';
 import { Button, Field, Input, Select, cn } from '@/components/ui/primitives';
 import { useCampaign, useCharacters, useCreatures, useEncounters } from '@/lib/api/hooks';
 import { getAdapter } from '@shared/game-systems/registry';
@@ -34,6 +37,7 @@ export function GMPanel({ engine }: { engine: SyncEngine }) {
 
   return (
     <div className="scrollbar-thin h-full space-y-6 overflow-y-auto p-4">
+      <FogAutomation engine={engine} />
       {selected ? (
         <Inspector key={`${selectedId}:${selected.revision}`} obj={selected} engine={engine} players={players} />
       ) : (
@@ -172,6 +176,102 @@ export function GMPanel({ engine }: { engine: SyncEngine }) {
   );
 }
 
+const TORCH_LABEL = { off: 'Off', remember: 'Remember explored', live: 'Live only' } as const;
+
+/** Per-scene fog automation: torchlight mode and revealing rooms as party tokens walk in. */
+function FogAutomation({ engine }: { engine: SyncEngine }) {
+  const scene = useTable((s) => s.snapshot?.scene?.scene);
+  const map = useTable((s) => s.snapshot?.scene?.map);
+  const campaignId = useTable((s) => s.snapshot?.campaign.id ?? '');
+  if (!scene || !map) return null;
+  const lighting = scene.lighting ?? { torch: 'off' as const, roomReveal: false };
+  const set = (next: Partial<typeof lighting>) => void engine.command('setSceneLighting', { sceneId: scene.id, ...lighting, ...next }).catch((e: Error) => toast.error(e.message));
+  return (
+    <section className="space-y-2" aria-label="Fog automation">
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">Fog automation</h3>
+      <div role="radiogroup" aria-label="Torchlight" className="grid grid-cols-3 gap-1">
+        {(['off', 'remember', 'live'] as const).map((t) => (
+          <button
+            key={t}
+            role="radio"
+            aria-checked={lighting.torch === t}
+            className={cn('rounded-md border px-1.5 py-1 text-[11px] leading-tight', lighting.torch === t ? 'border-accent bg-accent/10 text-text' : 'border-border text-muted hover:bg-surface-2')}
+            onClick={() => lighting.torch !== t && set({ torch: t })}
+          >
+            {t === 'off' ? 'Torchlight off' : TORCH_LABEL[t]}
+          </button>
+        ))}
+      </div>
+      <label className="flex items-center gap-2 text-xs">
+        <input type="checkbox" className="accent-[var(--color-accent)]" checked={lighting.roomReveal} onChange={(e) => set({ roomReveal: e.target.checked })} /> Reveal rooms when a character walks in
+      </label>
+      {!map.walls && (
+        <p className="text-[11px] text-faint">
+          No walls on this map yet: add them in{' '}
+          <Link className="text-accent underline" to={`/campaigns/${campaignId}/maps/${map.id}`}>
+            Scale &amp; grid
+          </Link>
+          .
+        </p>
+      )}
+      {lighting.torch !== 'off' && !map.calibration && <p className="text-[11px] text-faint">Set the map's scale so torchlight knows how far to reach.</p>}
+    </section>
+  );
+}
+
+/** GM-set light a party token carries (a torch, a lantern), in the map's units. */
+function LightRadius({ obj, update }: { obj: SceneObject; update: (patch: Record<string, unknown>) => void }) {
+  const map = useTable((s) => s.snapshot?.scene?.map);
+  const metric = !!map && ['m', 'km'].includes(map.grid.displayUnit);
+  const presets = metric ? [1.5, 3, 4.5, 6, 9, 18] : [5, 10, 15, 20, 30, 60];
+  const unit = metric ? 'm' : 'ft';
+  const toMetersU = (v: number) => (metric ? v : toMeters(v, 'ft'));
+  const current = obj.lightRadiusMeters ? Math.round((metric ? obj.lightRadiusMeters : fromMeters(obj.lightRadiusMeters, 'ft')) * 10) / 10 : 0;
+  const [custom, setCustom] = useState(!!current && !presets.includes(current));
+  const disabled = !map?.calibration;
+  return (
+    <Field label="Light radius" htmlFor="objLight" hint={disabled ? "Set the map's scale first" : 'Clears fog around this token when torchlight is on.'}>
+      <div className="flex gap-1.5">
+        <Select
+          id="objLight"
+          className="h-8 flex-1 text-xs"
+          disabled={disabled}
+          value={custom ? 'custom' : String(current)}
+          onChange={(e) => {
+            if (e.target.value === 'custom') return setCustom(true);
+            setCustom(false);
+            const v = Number(e.target.value);
+            update({ lightRadiusMeters: v ? toMetersU(v) : null });
+          }}
+        >
+          <option value="0">None</option>
+          {presets.map((v) => (
+            <option key={v} value={v}>
+              {v} {unit}
+            </option>
+          ))}
+          <option value="custom">Custom…</option>
+        </Select>
+        {custom && (
+          <Input
+            aria-label={`Light radius in ${unit}`}
+            type="number"
+            min={0}
+            step="any"
+            className="h-8 w-20 text-xs"
+            defaultValue={current || ''}
+            disabled={disabled}
+            onBlur={(e) => {
+              const v = Number(e.target.value);
+              if (v >= 0) update({ lightRadiusMeters: v ? toMetersU(v) : null });
+            }}
+          />
+        )}
+      </div>
+    </Field>
+  );
+}
+
 function Inspector({ obj, engine, players }: { obj: SceneObject; engine: SyncEngine; players: { userSub: string; displayName: string }[] }) {
   const [label, setLabel] = useState(obj.appearance.label ?? '');
   const [notes, setNotes] = useState(obj.gmNotes ?? '');
@@ -203,6 +303,7 @@ function Inspector({ obj, engine, players }: { obj: SceneObject; engine: SyncEng
           <Trash2 className="h-4 w-4" aria-hidden />
         </Button>
       </div>
+      {isPartyToken(obj) && <LightRadius obj={obj} update={update} />}
       <Conditions value={obj.conditions ?? []} options={getAdapter(useTable.getState().snapshot?.campaign.systemId ?? 'generic-d20').conditionDefinitions} editable onChange={(conditions) => void update({ conditions })} />
       {(obj.gmStats?.hp || obj.objectType === 'CREATURE' || obj.objectType === 'NPC') && <HitPoints obj={obj} update={update} />}
       {obj.objectType === 'LOOT' && <LootEditor obj={obj} update={update} />}

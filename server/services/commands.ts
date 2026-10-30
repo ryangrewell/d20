@@ -25,7 +25,7 @@ import { pickupLoot } from './loot';
 import { spawnEncounter } from './encounters';
 import { isUndoable, undoLast, undoWrite } from './undo';
 import { restoreCheckpoint } from './checkpoints';
-import { lightingOn, lightingUpdate, sceneGeometry, writesExplored } from './lighting';
+import { lightingGuards, lightingOn, lightingRace, lightingUpdate, sceneGeometry } from './lighting';
 import { isPartyToken } from '@shared/lighting/light';
 
 export type HandlerCtx = { deps: Deps; actor: Actor; session: GameSession; campaign: CampaignContext };
@@ -201,10 +201,12 @@ const handlers: { [K in CommandType]: Handler<K> } = {
     }
     // Light, visibility or party membership changes can change what players see.
     const lightingFields = lightRadiusMeters !== undefined || 'visibility' in rest || 'objectType' in rest || assignedControllerSub !== undefined;
-    const lit = lightingFields && lightingOn(scene) && (isPartyToken(obj) || isPartyToken(after)) ? await relight(ctx, scene, fog, replaced(await loadSceneObjects(ctx.deps, scene.id), after)) : unlit(fog);
+    const affectsLight = lightingFields && (isPartyToken(obj) || isPartyToken(after));
+    const lit = affectsLight && lightingOn(scene) ? await relight(ctx, scene, fog, replaced(await loadSceneObjects(ctx.deps, scene.id), after)) : unlit(fog);
     return {
       changes: [{ kind: 'object', before: obj, after, fog: lit.fog }, ...lit.changes],
-      writes: [{ Put: { Item: objectItem(after), ConditionExpression: 'revision = :rev', ExpressionAttributeValues: { ':rev': obj.revision } } }, ...lit.writes],
+      // If the GM changes the scene's lighting at the same moment, re-run against the new setting.
+      writes: [{ Put: { Item: objectItem(after), ConditionExpression: 'revision = :rev', ExpressionAttributeValues: { ':rev': obj.revision } } }, ...lit.writes, ...(affectsLight ? lightingGuards(scene, []) : [])],
     };
   },
 
@@ -326,6 +328,8 @@ const handlers: { [K in CommandType]: Handler<K> } = {
       writes: [
         { Update: { Key: keys.scene(scene.id), UpdateExpression: 'SET lighting = :l, updatedAt = :now', ExpressionAttributeValues: { ':l': next.lighting, ':now': next.updatedAt } } },
         ...(lu.write ? [lu.write] : []),
+        // Party tokens changed by a concurrent command (light radius, visibility) make this re-run on fresh state.
+        ...lightingGuards(scene, objects.filter(isPartyToken)).slice(1),
       ],
     };
   },
@@ -487,7 +491,7 @@ async function runCommand(deps: Deps, actor: Actor, session: GameSession, campai
     if (isConditionalFailure(err)) {
       const dup = await deps.db.get<{ revision: number; ts: string; result: unknown }>(keys.command(sessionId, commandId));
       if (dup) return { ok: true, commandId, newRevision: dup.revision, serverTime: dup.ts, duplicate: true };
-      if (writesExplored(out.writes)) throw new ExploredRace();
+      if (lightingRace(out.writes)) throw new ExploredRace();
       throw new AppError('CONFLICT', 'Someone else changed this at the same moment. Please try again.');
     }
     throw err;

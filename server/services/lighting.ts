@@ -159,5 +159,20 @@ export async function lightingUpdate(
   };
 }
 
-/** True when a write in this transaction is the explored record (used to retry once on a race). */
-export const writesExplored = (writes: TxItem[]) => writes.some((w) => ('Put' in w && w.Put.Item.SK === 'EXPLORED') || ('Delete' in w && w.Delete.Key.SK === 'EXPLORED'));
+/**
+ * Lighting reads tokens and scene settings that another command may change at the same moment.
+ * These checks make such a race fail at commit, and the command then re-runs once on fresh state.
+ */
+export function lightingGuards(scene: Scene, partyTokens: SceneObject[]): TxItem[] {
+  const l = scene.lighting;
+  return [
+    l
+      ? { ConditionCheck: { Key: keys.scene(scene.id), ConditionExpression: 'lighting.torch = :t AND lighting.roomReveal = :r', ExpressionAttributeValues: { ':t': l.torch, ':r': l.roomReveal } } }
+      : { ConditionCheck: { Key: keys.scene(scene.id), ConditionExpression: 'attribute_not_exists(lighting)' } },
+    ...partyTokens.map((o): TxItem => ({ ConditionCheck: { Key: keys.object(scene.id, o.id), ConditionExpression: 'revision = :rev', ExpressionAttributeValues: { ':rev': o.revision } } })),
+  ];
+}
+
+/** True when this transaction depends on lighting state, so a conditional failure is worth one retry. */
+export const lightingRace = (writes: TxItem[]) =>
+  writes.some((w) => ('Put' in w && w.Put.Item.SK === 'EXPLORED') || ('Delete' in w && w.Delete.Key.SK === 'EXPLORED') || 'ConditionCheck' in w);

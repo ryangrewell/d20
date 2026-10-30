@@ -14,6 +14,7 @@ import { commit, sessionAudience } from './commit';
 import { listMembers } from './campaigns';
 import { visibleMessages } from './chat';
 import { loadLayers } from './lighting';
+import { loadMapWalls } from './mapWalls';
 
 function sessionItem(s: GameSession) {
   return { ...keys.session(s.id), GSI1PK: `CAMP#${s.campaignId}`, GSI1SK: `SESSION#${String(s.number).padStart(6, '0')}`, entity: 'Session', ...s };
@@ -187,6 +188,9 @@ export async function getSessionSnapshot(deps: Deps, actor: Actor, sessionId: st
   const [map, objects] = await Promise.all([deps.db.get<MapDefinition>(keys.map(scene.campaignId, scene.mapId)), loadSceneObjects(deps, scene.id)]);
   const fogState = await loadFog(deps, scene, { objects });
   if (!map) return { ...base, waiting: false as const, scene: null };
+  // Walls (and the GM's room names) outline unexplored areas: GM only.
+  const { walls: _w, ...playerMap } = map;
+  const gmWalls = asGM ? await loadMapWalls(deps, map) : null;
   const asset = await deps.db.get<{ s3Key: string }>(keys.asset(scene.campaignId, map.assetId));
   const imageUrl = asset ? await deps.blobs.presignGet(asset.s3Key, 3600) : null;
   const visible = objects.filter((o) => canViewerSeeObject(o, viewer, fogState.fog));
@@ -195,7 +199,7 @@ export async function getSessionSnapshot(deps: Deps, actor: Actor, sessionId: st
     waiting: false as const,
     scene: {
       scene: asGM ? scene : publicScene(scene),
-      map,
+      map: asGM ? (gmWalls ? { ...map, walls: gmWalls } : map) : playerMap,
       imageUrl,
       objects: asGM ? visible : visible.map(publicObject),
       fog: fogWire(fogState.fog),

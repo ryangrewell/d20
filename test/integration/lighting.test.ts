@@ -104,6 +104,12 @@ d('torchlight and room reveal', () => {
     await ok(gm.call('POST', `/sessions/${sessionId}/transition`, { action: 'start' }));
   });
 
+  it('never sends walls or room names to players', async () => {
+    await freshScene();
+    expect((await snap(gm)).scene.map.walls.rooms).toHaveLength(2);
+    expect((await snap(alice)).scene.map.walls).toBeUndefined();
+  });
+
   it('keeps lighting controls GM-only and light on party tokens only', async () => {
     await freshScene();
     expect((await alice.command(sessionId, 'setSceneLighting', { sceneId, torch: 'live', roomReveal: false })).status).toBe(403);
@@ -140,6 +146,26 @@ d('torchlight and room reveal', () => {
     await move(pc, 150, 200);
     expect(aliceItems().some((i) => i.type === 'SCENE_OBJECT_REMOVED' && i.objectId === ghoul)).toBe(true);
     expect(await aliceSees(ghoul)).toBe(false);
+  });
+
+  it('switching torchlight on lights tokens that already carry light', async () => {
+    await freshScene();
+    await ok(gm.command(sessionId, 'updateSceneObject', { objectId: pc, patch: { lightRadiusMeters: 10 } }));
+    h.published.length = 0;
+    await lighting('live', false);
+    expect(aliceItems().filter((i) => i.type === 'FOG_LAYERS').map((i) => (i.lights as unknown[]).length)).toEqual([1]);
+    const gmItems = h.published.filter((p) => p.channel.endsWith('/gm')).flatMap((p) => p.event.items);
+    expect(gmItems.some((i) => i.type === 'FOG_LAYERS')).toBe(true);
+  });
+
+  it('never loses light when the GM sets a radius and switches torchlight on at the same moment', async () => {
+    for (let i = 0; i < 4; i++) {
+      await freshScene();
+      await Promise.all([gm.command(sessionId, 'updateSceneObject', { objectId: pc, patch: { lightRadiusMeters: 10 } }), gm.command(sessionId, 'setSceneLighting', { sceneId, torch: 'live', roomReveal: false })]);
+      expect((await snap(alice)).scene.fog.lights).toHaveLength(1);
+      const lastLayers = h.published.filter((p) => p.channel.endsWith(`/user/${alice.sub}`)).flatMap((p) => p.event.items).filter((x) => x.type === 'FOG_LAYERS').at(-1);
+      expect((lastLayers?.lights as unknown[] | undefined)?.length).toBe(1);
+    }
   });
 
   it('stops light at walls', async () => {
