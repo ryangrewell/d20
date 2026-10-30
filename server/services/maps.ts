@@ -124,7 +124,8 @@ export async function updateMap(deps: Deps, actor: Actor, campaignId: string, ma
   if (input.walls === null) delete next.walls;
   else if (input.walls) {
     const inside = (p: { x: number; y: number }) => p.x >= 0 && p.y >= 0 && p.x <= map.widthPx && p.y <= map.heightPx;
-    if (!input.walls.rooms.every((r) => r.points.every(inside)) || !input.walls.doorways.every((d) => inside(d.a) && inside(d.b))) throw invalid('Rooms and doorways must be on the map.');
+    const { rooms, doorways, lines = [] } = input.walls;
+    if (!rooms.every((r) => r.points.every(inside)) || !doorways.every((d) => inside(d.a) && inside(d.b)) || !lines.every((l) => l.every(inside))) throw invalid('Walls must be on the map.');
     next.walls = input.walls;
   }
   await deps.db.put({ ...keys.map(campaignId, mapId), entity: 'Map', ...next });

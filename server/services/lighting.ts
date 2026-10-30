@@ -8,7 +8,7 @@ import type { FogShape, FogState } from '@shared/fog';
 import { createExplored, decodeExplored, encodeExplored, markPolygon, type ExploredGrid } from '@shared/lighting/explored';
 import { isPartyToken, lightPolygon, partyLights } from '@shared/lighting/light';
 import { encodePolygon } from '@shared/lighting/wire';
-import { roomsContaining, wallSegments, type MapWalls, type Segment } from '@shared/lighting/walls';
+import { revealRoomsAt, wallSegments, type MapWalls, type Segment } from '@shared/lighting/walls';
 import type { MapDefinition, Scene, SceneObject } from '@shared/model';
 import { keys, type TxItem } from '../repo/db';
 import type { Deps } from '../context';
@@ -133,7 +133,7 @@ export async function lightingUpdate(
   }
   if (scene.lighting?.roomReveal && geo.walls) {
     for (const o of objectsAfter.filter(visibleParty)) {
-      for (const room of roomsContaining(geo.walls, { x: o.x, y: o.y })) {
+      for (const room of revealRoomsAt(geo.walls, { x: o.x, y: o.y })) {
         const g = ensure();
         if (g) changed = markPolygon(g, room.points, stamp) || changed;
       }

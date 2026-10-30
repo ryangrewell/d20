@@ -72,10 +72,10 @@ test('GM draws rooms on an uploaded map, and a room reveals when a character wal
   const map = await gm.call('POST', `/campaigns/${campaign.id}/maps`, { assetId: intent.assetId, name: 'Two rooms' });
   await gm.call('PATCH', `/campaigns/${campaign.id}/maps/${map.id}`, { calibration: { a: { x: 0, y: 0 }, b: { x: 600, y: 0 }, enteredDistance: 60, enteredUnit: 'm', pixelsPerMeter: 10 } });
 
-  // --- GM draws two rectangle rooms on Scale & grid and saves.
+  // --- GM draws two rectangle rooms, a building and a wall line on Scale & grid, and saves.
   const g = await (await browser.newContext()).newPage();
   await signedInPage(g, gm.token, `/campaigns/${campaign.id}/maps/${map.id}`);
-  await g.getByRole('button', { name: 'Rectangle room' }).click();
+  await g.getByRole('button', { name: 'Rectangle' }).click();
   const at = (p: { x: number; y: number }) => g.evaluate((pt) => (window as any).__d20setup.mapToClient(pt), p);
   for (const [a, b] of [[{ x: 20, y: 20 }, { x: 280, y: 380 }], [{ x: 320, y: 20 }, { x: 580, y: 380 }]] as const) {
     const [s, e] = [await at(a), await at(b)];
@@ -84,9 +84,30 @@ test('GM draws rooms on an uploaded map, and a room reveals when a character wal
     await g.mouse.move(e.x, e.y, { steps: 5 });
     await g.mouse.up();
   }
-  await expect(g.getByRole('list', { name: 'Rooms' }).getByRole('listitem')).toHaveCount(2);
+  await g.getByRole('radio', { name: 'Building' }).click();
+  {
+    const [s, e] = [await at({ x: 100, y: 300 }), await at({ x: 150, y: 350 })];
+    await g.mouse.move(s.x, s.y);
+    await g.mouse.down();
+    await g.mouse.move(e.x, e.y, { steps: 5 });
+    await g.mouse.up();
+  }
+  await g.getByRole('button', { name: 'Wall line' }).click();
+  for (const pt of [{ x: 40, y: 390 }, { x: 200, y: 390 }]) {
+    const c = await at(pt);
+    await g.mouse.click(c.x, c.y);
+  }
+  const end = await at({ x: 200, y: 390 });
+  await g.mouse.dblclick(end.x, end.y);
+  await expect(g.getByRole('list', { name: 'Rooms and buildings' }).getByRole('listitem')).toHaveCount(3);
+  await expect(g.getByText('2 rooms · 1 building · 1 wall line · 0 doorways')).toBeVisible();
   await g.getByRole('button', { name: 'Save walls' }).click();
-  await expect.poll(async () => (await gm.call('GET', `/campaigns/${campaign.id}/maps/${map.id}`)).map.walls?.rooms.length).toBe(2);
+  await expect
+    .poll(async () => {
+      const w = (await gm.call('GET', `/campaigns/${campaign.id}/maps/${map.id}`)).map.walls;
+      return w && [w.rooms.length, w.rooms.filter((r: { kind?: string }) => r.kind === 'building').length, w.lines?.length];
+    })
+    .toEqual([3, 1, 1]);
 
   // --- Live table: PC between the rooms; the GM turns on room reveal from the GM tools.
   const scene = await gm.call('POST', `/campaigns/${campaign.id}/scenes`, { mapId: map.id, name: 'Two rooms', fogInitial: 'covered' });

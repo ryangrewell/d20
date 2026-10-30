@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { generateFloorplan } from '../generator/floorplan';
-import { floorplanToWalls, roomsContaining, snapToRooms, wallSegments, type MapWalls } from './walls';
+import { floorplanToWalls, revealRoomsAt, roomsContaining, snapToRooms, wallSegments, type MapWalls } from './walls';
 
 const rect = (id: string, x: number, y: number, w: number, h: number) => ({ id, points: [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }] });
 const key = (s: { a: { x: number; y: number }; b: { x: number; y: number } }) => [s.a, s.b].map((p) => `${p.x},${p.y}`).sort().join('|');
@@ -33,6 +33,25 @@ describe('hand-drawn rooms', () => {
     expect(snapToRooms(walls, { x: 103, y: 97 }, 6)).toEqual({ x: 100, y: 100 });
     expect(snapToRooms(walls, { x: 103, y: 50 }, 6)).toEqual({ x: 100, y: 50 });
     expect(snapToRooms(walls, { x: 130, y: 50 }, 6)).toEqual({ x: 130, y: 50 });
+  });
+});
+
+describe('outdoor walls', () => {
+  it('wall lines block light, and a doorway on one leaves a gate', () => {
+    const walls: MapWalls = { rooms: [], doorways: [{ a: { x: 0, y: 40 }, b: { x: 0, y: 60 } }], lines: [[{ x: 0, y: 0 }, { x: 0, y: 100 }, { x: 50, y: 100 }]] };
+    expect(wallSegments(walls).map(key).sort()).toEqual(['0,0|0,40', '0,100|0,60', '0,100|50,100'].sort());
+  });
+
+  it('snaps onto wall line corners too', () => {
+    const walls: MapWalls = { rooms: [], doorways: [], lines: [[{ x: 10, y: 10 }, { x: 90, y: 10 }]] };
+    expect(snapToRooms(walls, { x: 93, y: 12 }, 6)).toEqual({ x: 90, y: 10 });
+  });
+
+  it('a building blocks light but is never revealed', () => {
+    const walls: MapWalls = { rooms: [{ ...rect('h', 0, 0, 100, 100), kind: 'building' }, rect('r', 100, 0, 100, 100)], doorways: [] };
+    expect(wallSegments(walls)).toHaveLength(7);
+    expect(revealRoomsAt(walls, { x: 100, y: 50 }).map((r) => r.id)).toEqual(['r']);
+    expect(revealRoomsAt(walls, { x: 50, y: 50 })).toEqual([]);
   });
 });
 

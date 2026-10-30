@@ -8,9 +8,13 @@ import type { Floor } from '../generator/floorplan';
 import { distToSegmentSq, pointInPolygon } from '../fog';
 
 export type Segment = { a: Point; b: Point };
-export type WallRoom = { id: string; name?: string; points: Point[] };
-/** `generated`: derived from the interior generator (read-only in the editor). */
-export type MapWalls = { rooms: WallRoom[]; doorways: Segment[]; generated?: boolean };
+/** A `building` (outdoor maps) blocks light like a room but is never revealed; you go inside by switching scenes. */
+export type WallRoom = { id: string; name?: string; kind?: 'room' | 'building'; points: Point[] };
+/**
+ * `lines`: open wall lines (fences, garden walls, barricades) that block light without enclosing anything.
+ * `generated`: derived from the interior generator (read-only in the editor).
+ */
+export type MapWalls = { rooms: WallRoom[]; doorways: Segment[]; lines?: Point[][]; generated?: boolean };
 
 /** Doorways also open walls drawn up to this far away (hand-drawn neighbours rarely touch exactly). */
 const DOORWAY_TOLERANCE = 6;
@@ -37,24 +41,23 @@ function overlapOnEdge(e: Segment, d: Segment): [number, number] | null {
   return hi > lo ? [lo, hi] : null;
 }
 
-/** Every wall segment light can't pass: room edges (shared ones once) with doorway gaps cut out. */
+/** Every wall segment light can't pass: room edges and wall lines (shared ones once) with doorway gaps cut out. */
 export function wallSegments(walls: MapWalls): Segment[] {
   const seen = new Set<string>();
   const out: Segment[] = [];
-  for (const room of walls.rooms) {
-    for (const e of edges(room.points)) {
-      const k = segKey(e);
-      if (seen.has(k)) continue;
-      seen.add(k);
-      const gaps = walls.doorways.map((d) => overlapOnEdge(e, d)).filter((g): g is [number, number] => !!g).sort((x, y) => x[0] - y[0]);
-      const at = (t: number): Point => ({ x: e.a.x + (e.b.x - e.a.x) * t, y: e.a.y + (e.b.y - e.a.y) * t });
-      let from = 0;
-      for (const [g0, g1] of gaps) {
-        if (g0 > from) out.push({ a: at(from), b: at(g0) });
-        from = Math.max(from, g1);
-      }
-      if (from < 1) out.push({ a: at(from), b: at(1) });
+  const lineEdges = (walls.lines ?? []).flatMap((pts) => pts.slice(1).map((b, i) => ({ a: pts[i]!, b })));
+  for (const e of [...walls.rooms.flatMap((r) => edges(r.points)), ...lineEdges]) {
+    const k = segKey(e);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    const gaps = walls.doorways.map((d) => overlapOnEdge(e, d)).filter((g): g is [number, number] => !!g).sort((x, y) => x[0] - y[0]);
+    const at = (t: number): Point => ({ x: e.a.x + (e.b.x - e.a.x) * t, y: e.a.y + (e.b.y - e.a.y) * t });
+    let from = 0;
+    for (const [g0, g1] of gaps) {
+      if (g0 > from) out.push({ a: at(from), b: at(g0) });
+      from = Math.max(from, g1);
     }
+    if (from < 1) out.push({ a: at(from), b: at(1) });
   }
   return out;
 }
@@ -64,12 +67,17 @@ export function roomsContaining(walls: MapWalls, p: Point): WallRoom[] {
   return walls.rooms.filter((r) => r.points.length >= 3 && (pointInPolygon(p, r.points) || edges(r.points).some((e) => distToSegmentSq(p, e.a, e.b) <= EDGE_TOLERANCE ** 2)));
 }
 
-/** Lines a point up with nearby room corners on each axis, so hand-drawn walls meet cleanly. */
+/** Rooms a party token standing at `p` reveals: buildings never are. */
+export function revealRoomsAt(walls: MapWalls, p: Point): WallRoom[] {
+  return roomsContaining(walls, p).filter((r) => r.kind !== 'building');
+}
+
+/** Lines a point up with nearby room and wall-line corners on each axis, so hand-drawn walls meet cleanly. */
 export function snapToRooms(walls: MapWalls, p: Point, tol: number): Point {
   let { x, y } = p;
   let [bx, by] = [tol, tol];
-  for (const r of walls.rooms) {
-    for (const v of r.points) {
+  for (const r of [...walls.rooms.map((room) => room.points), ...(walls.lines ?? [])]) {
+    for (const v of r) {
       if (Math.abs(v.x - p.x) <= bx) [x, bx] = [v.x, Math.abs(v.x - p.x)];
       if (Math.abs(v.y - p.y) <= by) [y, by] = [v.y, Math.abs(v.y - p.y)];
     }

@@ -232,6 +232,33 @@ d('torchlight and room reveal', () => {
     expect(await aliceSees(ghoul)).toBe(true);
   });
 
+  it('outdoors: light runs down the street but not past wall lines or into buildings, which never reveal', async () => {
+    const outdoor = (await ok(gm.call('POST', `/campaigns/${campaignId}/maps`, { assetId: await upload(600, 400), name: 'Street' }))).id;
+    await ok(
+      gm.call('PATCH', `/campaigns/${campaignId}/maps/${outdoor}`, {
+        calibration: { a: { x: 0, y: 0 }, b: { x: 600, y: 0 }, enteredDistance: 60, enteredUnit: 'm', pixelsPerMeter: 10 },
+        walls: { rooms: [{ ...rect('house', 400, 200, 150, 150), kind: 'building' }], doorways: [], lines: [[{ x: 200, y: 0 }, { x: 200, y: 150 }]] },
+      }),
+    );
+    sceneId = (await ok(gm.call('POST', `/campaigns/${campaignId}/scenes`, { mapId: outdoor, name: 'Street', fogInitial: 'covered' }))).id;
+    await ok(gm.command(sessionId, 'switchActiveScene', { sceneId }));
+    const spawn = async (x: number, y: number, label: string, type = 'CREATURE') =>
+      (await ok(gm.command(sessionId, 'spawnSceneObject', { sceneId, objectType: type, x, y, label, visibility: 'VISIBLE_TO_ALL', ...(type === 'PC' ? { assignedControllerSub: alice.sub } : {}) }))).result.objectId as string;
+    const walker = await spawn(100, 100, 'Alice', 'PC');
+    const [street, fence, indoors] = [await spawn(300, 300, 'Street'), await spawn(300, 50, 'Behind fence'), await spawn(475, 275, 'Indoors')];
+    await lighting('live', false);
+    await ok(gm.command(sessionId, 'updateSceneObject', { objectId: walker, patch: { lightRadiusMeters: 50 } }));
+    expect(await aliceSees(street)).toBe(true);
+    expect(await aliceSees(fence)).toBe(false);
+    expect(await aliceSees(indoors)).toBe(false);
+
+    // Walking along the house's wall reveals nothing inside it.
+    await ok(gm.command(sessionId, 'updateSceneObject', { objectId: walker, patch: { lightRadiusMeters: null } }));
+    await lighting('off', true);
+    await move(walker, 400, 300);
+    expect(await aliceSees(indoors)).toBe(false);
+  });
+
   it('a hidden party token lights nothing', async () => {
     await freshScene();
     await lighting('live', false);

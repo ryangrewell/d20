@@ -41,8 +41,9 @@ export const GridSchema = z.object({
 
 const Segment = z.object({ a: Point, b: Point });
 export const MapWallsSchema = z.object({
-  rooms: z.array(z.object({ id: z.string().min(1).max(40), name: z.string().max(80).optional(), points: z.array(Point).min(3).max(200) })).max(200),
+  rooms: z.array(z.object({ id: z.string().min(1).max(40), name: z.string().max(80).optional(), kind: z.enum(['room', 'building']).optional(), points: z.array(Point).min(3).max(200) })).max(200),
   doorways: z.array(Segment).max(400),
+  lines: z.array(z.array(Point).min(2).max(200)).max(400).optional(),
 });
 
 export const CalibrationSchema = z.object({
