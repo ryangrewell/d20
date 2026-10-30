@@ -7,7 +7,7 @@
  *   - shared channel: the common player projection (Shared Display)
  * so a hidden object never travels on a channel a player can subscribe to.
  */
-import type { FogOp, FogState } from '@shared/fog';
+import type { FogOp, FogShape, FogState } from '@shared/fog';
 import { channelPath, type ActorStamp, type DurableEvent, type DurableEventBody } from '@shared/events';
 import type { ChatMessage, GameSession, InitiativeState, PresenterFocus, Scene, SceneObject } from '@shared/model';
 import { canViewerSeeObject, publicInitiative, publicObject, publicScene, publicSession, SHARED_VIEWER, type Viewer } from '@shared/projection';
@@ -16,6 +16,7 @@ export type Change =
   | { kind: 'object'; before?: SceneObject; after?: SceneObject; fog: FogState }
   | { kind: 'fog'; sceneId: string; seq: number; op: FogOp; objects: SceneObject[]; fogBefore: FogState; fogAfter: FogState }
   | { kind: 'fogReset'; sceneId: string; initial: 'covered' | 'revealed'; objects: SceneObject[]; fogBefore: FogState; fogAfter: FogState }
+  | { kind: 'fogLayers'; sceneId: string; objects: SceneObject[]; fogBefore: FogState; fogAfter: FogState; explored: string | null; lights: FogShape[] }
   | { kind: 'session'; session: GameSession }
   | { kind: 'activeScene'; sceneId: string }
   | { kind: 'scene'; scene: Scene }
@@ -62,10 +63,15 @@ export function projectChange(change: Change, a: Audience, activeSceneId: string
       return [];
     }
     case 'fog':
-    case 'fogReset': {
+    case 'fogReset':
+    case 'fogLayers': {
       if (!sceneVisible(change.sceneId)) return [];
       const items: DurableEventBody[] =
-        change.kind === 'fog' ? [{ type: 'FOG_UPDATED', sceneId: change.sceneId, seq: change.seq, op: change.op }] : [{ type: 'FOG_RESET', sceneId: change.sceneId, initial: change.initial }];
+        change.kind === 'fog'
+          ? [{ type: 'FOG_UPDATED', sceneId: change.sceneId, seq: change.seq, op: change.op }]
+          : change.kind === 'fogReset'
+            ? [{ type: 'FOG_RESET', sceneId: change.sceneId, initial: change.initial }]
+            : [{ type: 'FOG_LAYERS', sceneId: change.sceneId, explored: change.explored, lights: change.lights }];
       if (isGM) return items;
       for (const o of change.objects) {
         const before = canViewerSeeObject(o, viewer, change.fogBefore);

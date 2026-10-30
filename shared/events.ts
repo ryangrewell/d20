@@ -7,7 +7,7 @@
  */
 import type { ChatMessage, CursorPacket, InitiativeState, PresenterFocus } from './model';
 import type { PublicScene, PublicSceneObject, PublicSession } from './projection';
-import type { FogOp } from './fog';
+import type { FogOp, FogShape } from './fog';
 
 export const GAME_NAMESPACE = 'game';
 export const PRESENCE_NAMESPACE = 'presence';
@@ -42,6 +42,8 @@ export function parseChannel(path: string): ChannelRef | null {
 export type ActorStamp = { sub: string; displayName: string };
 
 export type DurableEventBody =
+  /** Automatic fog layers changed: explored area (encoded grid) and current torchlight. */
+  | { type: 'FOG_LAYERS'; sceneId: string; explored: string | null; lights: FogShape[] }
   | { type: 'SESSION_UPDATED'; session: PublicSession }
   | { type: 'ACTIVE_SCENE_CHANGED'; sceneId: string }
   | { type: 'SCENE_UPDATED'; scene: PublicScene }

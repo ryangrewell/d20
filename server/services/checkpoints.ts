@@ -12,13 +12,15 @@ import { invalid, notFound } from '@shared/errors';
 import type { FogOpRecord, Scene, SceneObject } from '@shared/model';
 import { keys } from '../repo/db';
 import { loadCampaign, requireActiveCampaign, requireGM, type Actor, type Deps } from '../context';
+import type { ExploredRecord } from './lighting';
 import { objectItem, requireGM as requireGMCommand, type Handler } from './commands';
 import { loadSceneObjects } from './sessions';
 
 const MAX_CHECKPOINTS_PER_SCENE = 50;
 
 export type CheckpointRecord = { id: string; sceneId: string; campaignId: string; label: string; objectCount: number; fogOpCount: number; s3Key: string; createdBy: string; createdAt: string };
-type CheckpointData = { version: 1; fogInitial: Scene['fogInitial']; objects: SceneObject[]; fogOps: FogOpRecord[] };
+/** `explored` (encoded automatic-reveal layer) is absent in checkpoints saved before torchlight existed. */
+type CheckpointData = { version: 1; fogInitial: Scene['fogInitial']; objects: SceneObject[]; fogOps: FogOpRecord[]; explored?: string | null };
 
 async function sceneFor(deps: Deps, actor: Actor, campaignId: string, sceneId: string) {
   const ctx = await loadCampaign(deps, actor, campaignId);
@@ -38,10 +40,10 @@ export async function createCheckpoint(deps: Deps, actor: Actor, campaignId: str
   requireActiveCampaign(ctx);
   const existing = await deps.db.queryPrefix<CheckpointRecord>(`SCENE#${sceneId}`, 'CHECKPOINT#');
   if (existing.length >= MAX_CHECKPOINTS_PER_SCENE) throw invalid(`A scene can keep at most ${MAX_CHECKPOINTS_PER_SCENE} checkpoints. Delete an old one first.`);
-  const [objects, fogOps] = await Promise.all([loadSceneObjects(deps, sceneId), deps.db.queryPrefix<FogOpRecord>(`SCENE#${sceneId}`, 'FOG#')]);
+  const [objects, fogOps, explored] = await Promise.all([loadSceneObjects(deps, sceneId), deps.db.queryPrefix<FogOpRecord>(`SCENE#${sceneId}`, 'FOG#'), deps.db.get<ExploredRecord>(keys.explored(sceneId))]);
   const id = ulid();
   const s3Key = `campaigns/${campaignId}/checkpoints/${sceneId}/${id}.json`;
-  const data: CheckpointData = { version: 1, fogInitial: scene.fogInitial, objects, fogOps };
+  const data: CheckpointData = { version: 1, fogInitial: scene.fogInitial, objects, fogOps, explored: explored?.encoded ?? null };
   await deps.blobs.putBytes(s3Key, new TextEncoder().encode(JSON.stringify(data)), 'application/json');
   const now = deps.now();
   const record: CheckpointRecord = {
@@ -78,11 +80,14 @@ export const restoreCheckpoint: Handler<'restoreCheckpoint'> = async (ctx, p) =>
   const currentRev = new Map(current.map((o) => [o.id, o.revision]));
   const keep = new Set(data.objects.map((o) => o.id));
   const now = deps.now().toISOString();
+  const exploredVersion = (await deps.db.get<ExploredRecord>(keys.explored(scene.id)))?.version ?? 0;
   await deps.db.batchWrite([
     ...current.filter((o) => !keep.has(o.id)).map((o) => ({ delete: keys.object(scene.id, o.id) })),
     // Bump revisions past anything clients hold so restored state wins.
     ...data.objects.map((o) => ({ put: objectItem({ ...o, sceneId: scene.id, revision: Math.max(o.revision, currentRev.get(o.id) ?? 0) + 1, updatedAt: now }) })),
     ...currentFog.map((f) => ({ delete: keys.fogOp(scene.id, f.seq) })),
+    // Explored area goes back to what it was; a new version keeps concurrent writers honest.
+    data.explored ? { put: { ...keys.explored(scene.id), entity: 'Explored', sceneId: scene.id, encoded: data.explored, version: exploredVersion + 1 } } : { delete: keys.explored(scene.id) },
   ]);
   // Fog ops are re-sequenced 1..n so the scene's counter stays authoritative.
   const ops = data.fogOps.sort((a, b) => a.seq - b.seq);

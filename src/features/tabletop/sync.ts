@@ -7,7 +7,9 @@
  * scene change, or access change repeats the sequence.
  */
 import { toast } from 'sonner';
-import type { SessionSnapshotDto } from '@shared/dto';
+import type { FogWire, SessionSnapshotDto } from '@shared/dto';
+import type { FogShape, FogState } from '@shared/fog';
+import { decodeExplored } from '@shared/lighting/explored';
 import type { DurableEvent, DurableEventBody, PresenceEvent } from '@shared/events';
 import type { CommandResult, CommandType, CommandInput } from '@shared/schemas/commands';
 import type { CursorPacket } from '@shared/model';
@@ -22,6 +24,13 @@ const CURSOR_TTL_MS = 8000;
 const CATCH_UP_MS = 20_000;
 /** Revisions are allocated before their write lands, so re-scan a small window behind the head. */
 const CATCH_UP_OVERLAP = 25;
+
+/** Decodes the automatic fog layers as they travel (explored grid encoded). */
+function layersFromWire(w: { explored: string | null; lights: FogShape[] }): Pick<FogState, 'explored' | 'lights'> {
+  return { ...(w.explored ? { explored: decodeExplored(w.explored) } : {}), ...(w.lights.length ? { lights: w.lights } : {}) };
+}
+
+const fogFromWire = (w: FogWire): FogState => ({ initial: w.initial, ops: w.ops, ...layersFromWire(w) });
 
 export class SyncEngine {
   private transport: RealtimeTransport;
@@ -178,7 +187,7 @@ export class SyncEngine {
     setTable({
       snapshot: snap,
       objects,
-      fog: snap.scene?.fog ?? { initial: 'revealed', ops: [] },
+      fog: snap.scene ? fogFromWire(snap.scene.fog) : { initial: 'revealed', ops: [] },
       fogVersion: prev.fogVersion + 1,
       lastFogOp: null,
       chat: snap.chat.length || this.view === 'shared' ? snap.chat : prev.chat,
@@ -230,7 +239,12 @@ export class SyncEngine {
         return;
       case 'FOG_RESET':
         if (item.sceneId !== sceneId) return;
-        setTable({ fog: { initial: item.initial, ops: [] }, lastFogOp: null, fogVersion: s.fogVersion + 1 });
+        // Torchlight survives a reset; the explored layer arrives separately (FOG_LAYERS).
+        setTable({ fog: { ...s.fog, initial: item.initial, ops: [] }, lastFogOp: null, fogVersion: s.fogVersion + 1 });
+        return;
+      case 'FOG_LAYERS':
+        if (item.sceneId !== sceneId) return;
+        setTable({ fog: { initial: s.fog.initial, ops: s.fog.ops, ...layersFromWire(item) }, lastFogOp: null, fogVersion: s.fogVersion + 1 });
         return;
       case 'ACTIVE_SCENE_CHANGED':
         if (!s.snapshot?.me.isGM || this.view === 'shared') toast.message('The GM changed the scene');

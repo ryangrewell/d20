@@ -40,6 +40,7 @@ export const keys = {
   characterAudit: (characterId: string, id: string) => ({ PK: `CHAR#${characterId}`, SK: `AUDIT#${id}` }),
   encounter: (campaignId: string, id: string) => ({ PK: `CAMP#${campaignId}`, SK: `ENCOUNTER#${id}` }),
   undo: (sessionId: string, id: string) => ({ PK: `SESSION#${sessionId}`, SK: `UNDO#${id}` }),
+  explored: (sceneId: string) => ({ PK: `SCENE#${sceneId}`, SK: 'EXPLORED' }),
   checkpoint: (sceneId: string, id: string) => ({ PK: `SCENE#${sceneId}`, SK: `CHECKPOINT#${id}` }),
   floorplan: (campaignId: string, id: string) => ({ PK: `CAMP#${campaignId}`, SK: `FLOORPLAN#${id}` }),
   journal: (campaignId: string, id: string) => ({ PK: `CAMP#${campaignId}`, SK: `JOURNAL#${id}` }),

@@ -11,7 +11,7 @@ import { FOG_LIMITS, type FogState } from '@shared/fog';
 import type { CampaignMember, ChatMessage, GameSession, MapDefinition, Scene, SceneObject } from '@shared/model';
 import { canViewerSeeObject } from '@shared/projection';
 import { CommandEnvelope, CommandPayloads, type CommandPayload, type CommandResult, type CommandType } from '@shared/schemas/commands';
-import { isConditionalFailure, keys } from '../repo/db';
+import { isConditionalFailure, keys, type TxItem } from '../repo/db';
 import { loadCampaign, loadSession, type Actor, type CampaignContext, type Deps } from '../context';
 import type { Change } from '../realtime/fanout';
 import { commit, type TransactItem } from './commit';
@@ -25,6 +25,8 @@ import { pickupLoot } from './loot';
 import { spawnEncounter } from './encounters';
 import { isUndoable, undoLast, undoWrite } from './undo';
 import { restoreCheckpoint } from './checkpoints';
+import { lightingOn, lightingUpdate, sceneGeometry, writesExplored } from './lighting';
+import { isPartyToken } from '@shared/lighting/light';
 
 export type HandlerCtx = { deps: Deps; actor: Actor; session: GameSession; campaign: CampaignContext };
 export type HandlerOutput = { changes: Change[]; writes: TransactItem[]; result?: unknown; projectionSession?: GameSession };
@@ -63,6 +65,18 @@ export async function loadObjectFor(ctx: HandlerCtx, objectId: string, sceneHint
   return { obj, scene, fog };
 }
 
+type Moved = { id: string; from: { x: number; y: number }; to: { x: number; y: number } };
+const unlit = (fog: FogState) => ({ changes: [] as Change[], writes: [] as TxItem[], fog });
+
+/** Recomputes torchlight and room reveal for a scene after its party tokens changed. */
+async function relight(ctx: HandlerCtx, scene: Scene, fogBefore: FogState, objectsAfter: SceneObject[], moved?: Moved) {
+  if (!lightingOn(scene)) return unlit(fogBefore);
+  const lu = await lightingUpdate(ctx.deps, scene, fogBefore, objectsAfter, moved ? { moved } : {});
+  return { changes: lu.change ? [lu.change] : [], writes: lu.write ? [lu.write] : [], fog: lu.fogAfter };
+}
+
+const replaced = (objects: SceneObject[], next: SceneObject) => objects.map((o) => (o.id === next.id ? next : o));
+
 export function objectItem(o: SceneObject) {
   return { ...keys.object(o.sceneId, o.id), GSI1PK: `OBJ#${o.id}`, GSI1SK: 'OBJ', entity: 'SceneObject', ...o };
 }
@@ -90,9 +104,11 @@ const handlers: { [K in CommandType]: Handler<K> } = {
     }
     const pos = await clampToMap(ctx, scene, p.x, p.y);
     const after: SceneObject = { ...obj, ...pos, revision: obj.revision + 1, updatedAt: ctx.deps.now().toISOString() };
+    const lit = lightingOn(scene) && isPartyToken(obj) ? await relight(ctx, scene, fog, replaced(await loadSceneObjects(ctx.deps, scene.id), after), { id: obj.id, from: { x: obj.x, y: obj.y }, to: pos }) : unlit(fog);
     return {
-      changes: [{ kind: 'object', before: obj, after, fog }],
+      changes: [{ kind: 'object', before: obj, after, fog: lit.fog }, ...lit.changes],
       writes: [
+        ...lit.writes,
         {
           Update: {
             Key: keys.object(scene.id, obj.id),
@@ -118,7 +134,7 @@ const handlers: { [K in CommandType]: Handler<K> } = {
     if (p.templateId && !template) throw notFound('Creature');
     const character = p.characterId ? await loadCharacter(ctx.deps, scene.campaignId, p.characterId) : null;
     if (p.characterId && !character) throw notFound('Character');
-    const { fog } = await loadFog(ctx.deps, scene);
+    const { fog } = await loadFog(ctx.deps, scene, { objects: existing });
     const pos = await clampToMap(ctx, scene, p.x, p.y);
     const now = ctx.deps.now().toISOString();
     const label = p.label ?? template?.name ?? character?.name;
@@ -148,16 +164,21 @@ const handlers: { [K in CommandType]: Handler<K> } = {
       ...(p.portal ? { portal: await requirePortalTarget(ctx, p.portal.targetSceneId) } : {}),
       ...(template ? { gmStats: { hp: { current: template.hpMax, max: template.hpMax }, ...(template.ac !== undefined ? { ac: template.ac } : {}), initiativeMod: template.initiativeMod, templateId: template.id } } : {}),
     };
-    return { changes: [{ kind: 'object', after: obj, fog }], writes: [{ Put: { Item: objectItem(obj), ConditionExpression: 'attribute_not_exists(PK)' } }], result: { objectId: obj.id } };
+    const lit = isPartyToken(obj) ? await relight(ctx, scene, fog, [...existing, obj]) : unlit(fog);
+    return {
+      changes: [{ kind: 'object', after: obj, fog: lit.fog }, ...lit.changes],
+      writes: [{ Put: { Item: objectItem(obj), ConditionExpression: 'attribute_not_exists(PK)' } }, ...lit.writes],
+      result: { objectId: obj.id },
+    };
   },
 
   async updateSceneObject(ctx, p) {
     requireGM(ctx);
     requirePlayable(ctx);
-    const { obj, fog } = await loadObjectFor(ctx, p.objectId, await findObjectScene(ctx, p.objectId));
+    const { obj, scene, fog } = await loadObjectFor(ctx, p.objectId, await findObjectScene(ctx, p.objectId));
     if (p.patch.assignedControllerSub) await requireMember(ctx, p.patch.assignedControllerSub);
     const after: SceneObject = { ...obj, revision: obj.revision + 1, updatedAt: ctx.deps.now().toISOString() };
-    const { label, tint, assignedControllerSub, allowedViewerIds, characterId, gmStats, conditions, portal, ...rest } = p.patch;
+    const { label, tint, assignedControllerSub, allowedViewerIds, characterId, gmStats, conditions, portal, lightRadiusMeters, ...rest } = p.patch;
     Object.assign(after, rest);
     if (portal === null) delete after.portal;
     else if (portal) after.portal = await requirePortalTarget(ctx, portal.targetSceneId);
@@ -172,17 +193,27 @@ const handlers: { [K in CommandType]: Handler<K> } = {
     if (assignedControllerSub === null) delete after.assignedControllerSub;
     else if (assignedControllerSub) after.assignedControllerSub = assignedControllerSub;
     if (allowedViewerIds) after.allowedViewerIds = allowedViewerIds;
+    if (lightRadiusMeters === null || lightRadiusMeters === 0) delete after.lightRadiusMeters;
+    else if (lightRadiusMeters !== undefined) after.lightRadiusMeters = lightRadiusMeters;
+    if (after.lightRadiusMeters) {
+      if (!isPartyToken(after)) throw invalid('Only party tokens can carry light.');
+      if (!(await sceneGeometry(ctx.deps, scene)).ppm) throw invalid("Set the map's scale before giving tokens light.");
+    }
+    // Light, visibility or party membership changes can change what players see.
+    const lightingFields = lightRadiusMeters !== undefined || 'visibility' in rest || 'objectType' in rest || assignedControllerSub !== undefined;
+    const lit = lightingFields && lightingOn(scene) && (isPartyToken(obj) || isPartyToken(after)) ? await relight(ctx, scene, fog, replaced(await loadSceneObjects(ctx.deps, scene.id), after)) : unlit(fog);
     return {
-      changes: [{ kind: 'object', before: obj, after, fog }],
-      writes: [{ Put: { Item: objectItem(after), ConditionExpression: 'revision = :rev', ExpressionAttributeValues: { ':rev': obj.revision } } }],
+      changes: [{ kind: 'object', before: obj, after, fog: lit.fog }, ...lit.changes],
+      writes: [{ Put: { Item: objectItem(after), ConditionExpression: 'revision = :rev', ExpressionAttributeValues: { ':rev': obj.revision } } }, ...lit.writes],
     };
   },
 
   async removeSceneObject(ctx, p) {
     requireGM(ctx);
     requirePlayable(ctx);
-    const { obj, fog } = await loadObjectFor(ctx, p.objectId, await findObjectScene(ctx, p.objectId));
-    return { changes: [{ kind: 'object', before: obj, fog }], writes: [{ Delete: { Key: keys.object(obj.sceneId, obj.id) } }] };
+    const { obj, scene, fog } = await loadObjectFor(ctx, p.objectId, await findObjectScene(ctx, p.objectId));
+    const lit = isPartyToken(obj) && obj.lightRadiusMeters ? await relight(ctx, scene, fog, (await loadSceneObjects(ctx.deps, scene.id)).filter((o) => o.id !== obj.id)) : unlit(fog);
+    return { changes: [{ kind: 'object', before: obj, fog: lit.fog }, ...lit.changes], writes: [{ Delete: { Key: keys.object(obj.sceneId, obj.id) } }, ...lit.writes] };
   },
 
   async transferSceneObject(ctx, p) {
@@ -207,15 +238,17 @@ const handlers: { [K in CommandType]: Handler<K> } = {
       revision: obj.revision + 1,
       updatedAt: ctx.deps.now().toISOString(),
     };
+    const party = isPartyToken(obj);
+    const leaving = party && obj.lightRadiusMeters ? await relight(ctx, source, sourceFog, (await loadSceneObjects(ctx.deps, source.id)).filter((o) => o.id !== obj.id)) : unlit(sourceFog);
+    const arriving = party ? await relight(ctx, target, targetFog, [...targetObjects, after]) : unlit(targetFog);
     return {
       // Leaves the source scene and appears in the target; each audience sees whichever side it may see.
-      changes: [
-        { kind: 'object', before: obj, fog: sourceFog },
-        { kind: 'object', after, fog: targetFog },
-      ],
+      changes: [{ kind: 'object', before: obj, fog: leaving.fog }, ...leaving.changes, { kind: 'object', after, fog: arriving.fog }, ...arriving.changes],
       writes: [
         { Delete: { Key: keys.object(source.id, obj.id), ConditionExpression: 'revision = :rev', ExpressionAttributeValues: { ':rev': obj.revision } } },
         { Put: { Item: objectItem(after), ConditionExpression: 'attribute_not_exists(PK)' } },
+        ...leaving.writes,
+        ...arriving.writes,
       ],
       result: { objectId: obj.id, sceneId: target.id, x: after.x, y: after.y },
     };
@@ -249,7 +282,10 @@ const handlers: { [K in CommandType]: Handler<K> } = {
     requireGM(ctx);
     requirePlayable(ctx);
     const scene = await loadSceneFor(ctx, p.sceneId);
-    const [{ fog: fogBefore }, objects] = await Promise.all([loadFog(ctx.deps, scene), loadSceneObjects(ctx.deps, scene.id)]);
+    const objects = await loadSceneObjects(ctx.deps, scene.id);
+    const { fog: fogBefore } = await loadFog(ctx.deps, scene, { objects });
+    // Reset also clears the explored layer; rooms the party stands in (room reveal) are re-revealed at once.
+    const lu = await lightingUpdate(ctx.deps, { ...scene, fogInitial: p.initial }, { ...fogBefore, initial: p.initial, ops: [] }, objects, { clearExplored: true });
     // Old fog-op items are cleared lazily below the transaction limit; reset is recorded by bumping a generation.
     const ops = await ctx.deps.db.queryPrefix<{ seq: number }>(`SCENE#${scene.id}`, 'FOG#');
     if (ops.length > 90) {
@@ -257,8 +293,13 @@ const handlers: { [K in CommandType]: Handler<K> } = {
     }
     const remaining = ops.slice(-90);
     return {
-      changes: [{ kind: 'fogReset', sceneId: scene.id, initial: p.initial, objects, fogBefore, fogAfter: { initial: p.initial, ops: [] } }],
+      changes: [
+        { kind: 'fogReset', sceneId: scene.id, initial: p.initial, objects, fogBefore, fogAfter: lu.fogAfter },
+        // Carries the new layers to clients; visibility changes were already covered by the reset above.
+        ...(lu.change?.kind === 'fogLayers' ? [{ ...lu.change, objects: [] }] : []),
+      ],
       writes: [
+        ...(lu.write ? [lu.write] : []),
         ...remaining.map((o) => ({ Delete: { Key: keys.fogOp(scene.id, o.seq) } })),
         {
           Update: {
@@ -267,6 +308,24 @@ const handlers: { [K in CommandType]: Handler<K> } = {
             ExpressionAttributeValues: { ':zero': 0, ':init': p.initial, ':now': ctx.deps.now().toISOString() },
           },
         },
+      ],
+    };
+  },
+
+  async setSceneLighting(ctx, p) {
+    requireGM(ctx);
+    requirePlayable(ctx);
+    const scene = await loadSceneFor(ctx, p.sceneId);
+    const next: Scene = { ...scene, lighting: { torch: p.torch, roomReveal: p.roomReveal }, updatedAt: ctx.deps.now().toISOString() };
+    const objects = await loadSceneObjects(ctx.deps, scene.id);
+    const { fog: fogBefore } = await loadFog(ctx.deps, scene, { objects });
+    // Switching on applies at once: current light is remembered, rooms the party stands in are revealed.
+    const lu = await lightingUpdate(ctx.deps, next, fogBefore, objects);
+    return {
+      changes: [{ kind: 'scene', scene: next }, ...(lu.change ? [lu.change] : [])],
+      writes: [
+        { Update: { Key: keys.scene(scene.id), UpdateExpression: 'SET lighting = :l, updatedAt = :now', ExpressionAttributeValues: { ':l': next.lighting, ':now': next.updatedAt } } },
+        ...(lu.write ? [lu.write] : []),
       ],
     };
   },
@@ -393,8 +452,26 @@ export async function executeCommand(deps: Deps, actor: Actor, raw: unknown): Pr
     return { ok: true, commandId, newRevision: prior.revision, serverTime: prior.ts, duplicate: true, ...(prior.result != null ? { result: prior.result } : {}) };
   }
 
+  // Two lit tokens moving at once can race on the explored layer; the loser re-runs once on fresh state.
+  try {
+    return await runCommand(deps, actor, session, campaign, commandId, type, parsed.data);
+  } catch (err) {
+    if (!(err instanceof ExploredRace)) throw err;
+  }
+  try {
+    return await runCommand(deps, actor, session, campaign, commandId, type, parsed.data);
+  } catch (err) {
+    if (err instanceof ExploredRace) throw new AppError('CONFLICT', 'Someone else changed this at the same moment. Please try again.');
+    throw err;
+  }
+}
+
+class ExploredRace extends Error {}
+
+async function runCommand(deps: Deps, actor: Actor, session: GameSession, campaign: CampaignContext, commandId: string, type: CommandType, payload: unknown): Promise<CommandResult> {
+  const sessionId = session.id;
   const handler = handlers[type] as Handler<typeof type>;
-  const out = await handler({ deps, actor, session, campaign }, parsed.data as never);
+  const out = await handler({ deps, actor, session, campaign }, payload as never);
   if (campaign.access.isGM && isUndoable(type)) {
     const undo = undoWrite(deps, actor, session.id, type, out);
     if (undo) out.writes.push(undo);
@@ -410,6 +487,7 @@ export async function executeCommand(deps: Deps, actor: Actor, raw: unknown): Pr
     if (isConditionalFailure(err)) {
       const dup = await deps.db.get<{ revision: number; ts: string; result: unknown }>(keys.command(sessionId, commandId));
       if (dup) return { ok: true, commandId, newRevision: dup.revision, serverTime: dup.ts, duplicate: true };
+      if (writesExplored(out.writes)) throw new ExploredRace();
       throw new AppError('CONFLICT', 'Someone else changed this at the same moment. Please try again.');
     }
     throw err;

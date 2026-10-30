@@ -1,5 +1,8 @@
 /** API response shapes shared by server and client. */
-import type { FogState } from './fog';
+import type { FogOp, FogShape } from './fog';
+
+/** Fog as sent to clients: the explored grid travels encoded (see shared/lighting/explored). */
+export type FogWire = { initial: 'covered' | 'revealed'; ops: FogOp[]; explored: string | null; lights: FogShape[] };
 import type { Campaign, CampaignInvite, CampaignRole, CampaignSettings, ChatMessage, GameSession, MapDefinition, Scene, SceneObject } from './model';
 import type { PublicScene, PublicSceneObject, PublicSession } from './projection';
 
@@ -29,7 +32,7 @@ export type SceneSnapshot = {
   map: MapDefinition;
   imageUrl: string | null;
   objects: (SceneObject | PublicSceneObject)[];
-  fog: FogState;
+  fog: FogWire;
   fogSeq: number;
 };
 

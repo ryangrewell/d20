@@ -67,6 +67,8 @@ export const CommandPayloads = {
   transferSceneObject: z.object({ objectId: Id, targetSceneId: Id, x: z.number().finite().optional(), y: z.number().finite().optional() }),
   updateFog: z.object({ sceneId: Id, op: FogOpSchema }),
   resetFog: z.object({ sceneId: Id, initial: z.enum(['covered', 'revealed']) }),
+  /** GM's fog automation for a scene: torchlight mode and revealing rooms on entry. */
+  setSceneLighting: z.object({ sceneId: Id, torch: z.enum(['off', 'remember', 'live']), roomReveal: z.boolean() }),
   switchActiveScene: z.object({ sceneId: Id }),
   presenterFocus: z.object({ sceneId: Id, center: Point, zoom: z.number().positive().max(16) }),
   /** GM places every creature of an encounter template around a point (hidden by default). */

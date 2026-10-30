@@ -3,6 +3,8 @@ import type { z } from 'zod';
 import { AppError, forbidden, notFound } from '@shared/errors';
 import { channelPath, type DurableEventBody } from '@shared/events';
 import type { FogState } from '@shared/fog';
+import type { FogWire } from '@shared/dto';
+import { encodeExplored } from '@shared/lighting/explored';
 import type { Campaign, FogOpRecord, GameSession, MapDefinition, Scene, SceneObject } from '@shared/model';
 import { canViewerSeeObject, publicObject, publicScene, publicSession, SHARED_VIEWER, type Viewer } from '@shared/projection';
 import type { CreateSessionInput } from '@shared/schemas/api';
@@ -11,6 +13,7 @@ import { loadCampaign, loadSession, requireActiveCampaign, requireGM, type Actor
 import { commit, sessionAudience } from './commit';
 import { listMembers } from './campaigns';
 import { visibleMessages } from './chat';
+import { loadLayers } from './lighting';
 
 function sessionItem(s: GameSession) {
   return { ...keys.session(s.id), GSI1PK: `CAMP#${s.campaignId}`, GSI1SK: `SESSION#${String(s.number).padStart(6, '0')}`, entity: 'Session', ...s };
@@ -123,10 +126,13 @@ export async function updateSessionDetails(deps: Deps, actor: Actor, sessionId: 
   return next;
 }
 
-export async function loadFog(deps: Deps, scene: Scene): Promise<{ fog: FogState; seq: number }> {
-  const ops = await deps.db.queryPrefix<FogOpRecord>(`SCENE#${scene.id}`, 'FOG#');
-  return { fog: { initial: scene.fogInitial, ops: ops.map((o) => o.op) }, seq: ops.at(-1)?.seq ?? 0 };
+/** Fog as players see it: the GM's ops plus the automatic layers (explored area, current torchlight). */
+export async function loadFog(deps: Deps, scene: Scene, opts: { objects?: SceneObject[] } = {}): Promise<{ fog: FogState; seq: number }> {
+  const [ops, layers] = await Promise.all([deps.db.queryPrefix<FogOpRecord>(`SCENE#${scene.id}`, 'FOG#'), loadLayers(deps, scene, opts.objects)]);
+  return { fog: { initial: scene.fogInitial, ops: ops.map((o) => o.op), ...layers }, seq: ops.at(-1)?.seq ?? 0 };
 }
+
+export const fogWire = (fog: FogState): FogWire => ({ initial: fog.initial, ops: fog.ops, explored: fog.explored ? encodeExplored(fog.explored) : null, lights: fog.lights ?? [] });
 
 export async function loadSceneObjects(deps: Deps, sceneId: string) {
   return deps.db.queryPrefix<SceneObject>(`SCENE#${sceneId}`, 'OBJ#');
@@ -178,7 +184,8 @@ export async function getSessionSnapshot(deps: Deps, actor: Actor, sessionId: st
     if (sceneOverride) throw notFound('Scene');
     return { ...base, waiting: false as const, scene: null };
   }
-  const [map, objects, fogState] = await Promise.all([deps.db.get<MapDefinition>(keys.map(scene.campaignId, scene.mapId)), loadSceneObjects(deps, scene.id), loadFog(deps, scene)]);
+  const [map, objects] = await Promise.all([deps.db.get<MapDefinition>(keys.map(scene.campaignId, scene.mapId)), loadSceneObjects(deps, scene.id)]);
+  const fogState = await loadFog(deps, scene, { objects });
   if (!map) return { ...base, waiting: false as const, scene: null };
   const asset = await deps.db.get<{ s3Key: string }>(keys.asset(scene.campaignId, map.assetId));
   const imageUrl = asset ? await deps.blobs.presignGet(asset.s3Key, 3600) : null;
@@ -191,7 +198,7 @@ export async function getSessionSnapshot(deps: Deps, actor: Actor, sessionId: st
       map,
       imageUrl,
       objects: asGM ? visible : visible.map(publicObject),
-      fog: fogState.fog,
+      fog: fogWire(fogState.fog),
       fogSeq: fogState.seq,
     },
   };

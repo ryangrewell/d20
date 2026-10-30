@@ -13,6 +13,8 @@ import type { Change } from '../realtime/fanout';
 import type { Actor, Deps } from '../context';
 import { objectItem, requireGM, type Handler, type HandlerOutput } from './commands';
 import { loadFog } from './sessions';
+import { lightingOn } from './lighting';
+import { isPartyToken } from '@shared/lighting/light';
 
 const UNDO_TTL_SECONDS = 24 * 3600;
 // Monotonic so records made in the same millisecond still sort in creation order.
@@ -142,6 +144,14 @@ export const undoLast: Handler<'undoLast'> = async (ctx) => {
       },
     });
     changes.push({ kind: 'sceneRefresh', sceneId: scene.id, reason: 'undo' });
+  }
+
+  // Torchlight and room reveal follow party tokens; viewers reload scenes whose lit tokens moved back.
+  const relit = new Set<string>();
+  for (const { before, after } of rec.objects) for (const o of [before, after]) if (o && isPartyToken(o)) relit.add(o.sceneId);
+  for (const sceneId of relit) {
+    const scene = await deps.db.get<Scene>(keys.scene(sceneId));
+    if (scene && lightingOn(scene) && !changes.some((c) => c.kind === 'sceneRefresh' && c.sceneId === sceneId)) changes.push({ kind: 'sceneRefresh', sceneId, reason: 'undo' });
   }
 
   writes.push({ Delete: { Key: keys.undo(ctx.session.id, rec.id), ConditionExpression: 'attribute_exists(PK)' } });
