@@ -73,6 +73,7 @@ The spec's **first deliverable works locally end to end** and is covered by an a
 - [x] F02 Owner-admin bootstrap script (used live); local dev equivalent
 - [x] F03 Admin dashboard (users, activity, campaigns, live sessions, storage, reports), user search/detail, suspend/block/unblock (disables Cognito sign-in), revoke admin (never the last), campaign member removal override
 - [x] F04 User reports (user/message) with admin queue and resolution; append-only audit log; blocked/suspended account screen
+- [x] G01 Torchlight (GM-set light radius on party tokens; remember or live mode) and room reveal on entry; walls from the generator or drawn on Scale & grid (2026-10-29)
 - [ ] F05 Load test (1 GM + 5 players), p95 latency, restore drill
 - [~] F06 Infra, domain, alarms, optional budget done; runbook partially in DEPLOYMENT.md
 

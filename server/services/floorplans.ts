@@ -56,7 +56,7 @@ export function generatedWalls(fp: Floorplan, level: number, pxPerMeter: number,
   const floor = fp.floors.find((f) => f.level === level);
   if (!floor) return null;
   const walls = floorplanToWalls(floor, pxPerMeter);
-  return { ...walls, rooms: walls.rooms.map((r) => (roomNames[r.id] ? { ...r, name: roomNames[r.id] } : r)) };
+  return { ...walls, rooms: walls.rooms.map((r) => (roomNames[r.id] ? { ...r, name: roomNames[r.id] } : r)), generated: true };
 }
 
 export function regenerate(input: FloorplanInput): Floorplan {

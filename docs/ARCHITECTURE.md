@@ -26,6 +26,8 @@ Browser (React + PixiJS)
 
 Fog is an ordered list of reveal/conceal operations over an initial state (`shared/fog.ts`). The renderer rasterises it to a canvas texture. The server evaluates the same operations to decide which tokens are "behind fog" and therefore omitted for players. Party tokens (PC or player-controlled) remain visible under fog. Uploaded map images themselves are not protected by fog (see SECURITY.md).
 
+Fog automation adds two layers to `FogState`, evaluated in this order by both the server and the renderer (`isFogged`): the initial state, then the **explored** layer (a ≤512-cell bit grid of area revealed automatically: rooms a party token walked into, and remembered torchlight), then the GM's own ops (last wins), then current **lights** (polygons from visible party tokens' `lightRadiusMeters`, clipped by walls), which show through everything. Walls and rooms live on the map (`MapDefinition.walls`; generated maps derive them from the floorplan), the torchlight mode and room reveal on the scene (`Scene.lighting`). Commands that move or change party tokens recompute the layers and emit a `fogLayers` change; the fan-out sends `FOG_LAYERS` plus add/remove for tokens whose visibility flipped. The explored layer is stored at `SCENE#id / EXPLORED` with a version; racing writers re-run once. GM fog undo only depends on the GM's own ops, so automatic reveals never block it.
+
 ## Sync and recovery (`src/features/tabletop/sync.ts`)
 
 1. Fetch snapshot to learn authorised channels and the access epoch.
@@ -57,6 +59,7 @@ Channel paths include `accessEpoch`. Removing a member (and, later, revoking a d
 | Scene | `SCENE#id` | `META` | `CAMP#id` / `SCENE#id` |
 | Scene object | `SCENE#id` | `OBJ#id` | `OBJ#id` / `OBJ` |
 | Fog op | `SCENE#id` | `FOG#seq` | |
+| Explored layer | `SCENE#id` | `EXPLORED` | encoded grid + version |
 | Character | `CAMP#id` | `CHAR#id` | |
 | Inventory item / GM-edit audit | `CHAR#id` | `ITEM#id` / `AUDIT#ulid` | |
 | Creature / encounter template | `CAMP#id` | `CREATURE#id` / `ENCOUNTER#id` | |

@@ -20,7 +20,7 @@ All routes are under `/api`. They need `Authorization: Bearer <Cognito ID token>
 | POST | `/commands` | Game command envelope (below) |
 | POST | `/campaigns/:cid/maps/upload-intent` | GM; returns presigned PUT (5 min) |
 | POST | `/campaigns/:cid/maps` | GM; finalize: sniff signature/dimensions, create map |
-| GET/PATCH | `/campaigns/:cid/maps/:mid` | GM; name, calibration + grid |
+| GET/PATCH | `/campaigns/:cid/maps/:mid` | GM; name, calibration + grid, `walls: { rooms: [{ id, name?, points }], doorways: [{ a, b }] } \| null` (map px, inside the map). Generated maps' walls come from their floorplan (`generated: true`). Player snapshots never include walls |
 | DELETE | `/campaigns/:cid/maps/:mid` | GM; deletes the map and its scenes (tokens, fog, checkpoints). 409 if one of them is the active scene of a live/paused session; planned sessions drop it. Returns `{ deletedScenes }` |
 | POST/PATCH | `/campaigns/:cid/scenes[/:scid]` | GM |
 | GET/POST | `/campaigns/:cid/characters` | List (own sheets in full, others by name only; GM sees all) / create (GM may set `ownerSub`) |
@@ -55,11 +55,12 @@ All routes are under `/api`. They need `Authorization: Bearer <Cognito ID token>
 |---|---|---|
 | `moveToken` | GM, or the token's controller | `objectId, x, y, expectedObjectRevision?` |
 | `spawnSceneObject` | GM | `sceneId, objectType, x, y, label?, tint?, sizeMeters?, visibility, allowedViewerIds?, assignedControllerSub?, gmNotes?, templateId?, characterId?, loot?, portal?` |
-| `updateSceneObject` | GM | `objectId, patch{ label, tint, …, conditions, loot, gmStats, characterId, portal }` |
+| `updateSceneObject` | GM | `objectId, patch{ label, tint, …, conditions, loot, gmStats, characterId, portal, lightRadiusMeters }`. `lightRadiusMeters` only on party tokens (PC or player-controlled) on a calibrated map |
 | `removeSceneObject` | GM | `objectId` |
 | `transferSceneObject` | GM | `objectId, targetSceneId, x?, y?` (defaults to the target map's centre; keeps id, controller, appearance) |
 | `updateFog` | GM | `sceneId, op{ mode, shape: rect\|polygon\|brush }` |
-| `resetFog` | GM | `sceneId, initial` |
+| `resetFog` | GM | `sceneId, initial` (also clears the explored layer) |
+| `setSceneLighting` | GM | `sceneId, torch: off\|remember\|live, roomReveal`. Emits `SCENE_UPDATED` and `FOG_LAYERS { sceneId, explored, lights }` (explored = run-length-encoded grid, see `shared/lighting/explored.ts`) |
 | `switchActiveScene` | GM | `sceneId` |
 | `presenterFocus` | GM | `sceneId, center, zoom` |
 | `spawnEncounter` | GM | `encounterId, sceneId, x, y, visibility` (default hidden); numbered copies in a grid around the point |

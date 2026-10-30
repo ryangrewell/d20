@@ -9,7 +9,8 @@ import { distToSegmentSq, pointInPolygon } from '../fog';
 
 export type Segment = { a: Point; b: Point };
 export type WallRoom = { id: string; name?: string; points: Point[] };
-export type MapWalls = { rooms: WallRoom[]; doorways: Segment[] };
+/** `generated`: derived from the interior generator (read-only in the editor). */
+export type MapWalls = { rooms: WallRoom[]; doorways: Segment[]; generated?: boolean };
 
 const DOORWAY_TOLERANCE = 2;
 const EDGE_TOLERANCE = 0.5;

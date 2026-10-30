@@ -1,4 +1,4 @@
-import { useMemo, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Crosshair, Hand, Maximize, Move, Ruler } from 'lucide-react';
@@ -11,8 +11,9 @@ import type { MapDefinition } from '@shared/model';
 import { campaignApi, qk, useMapDetail } from '@/lib/api/hooks';
 import { Badge, Button, ErrorNotice, Field, Input, Select, Spinner, cn } from '@/components/ui/primitives';
 import { useViewport } from './useViewport';
+import { isWallTool, useWallsEditor, WallsOverlay, WallsSection, type WallTool } from './WallsEditor';
 
-type Tool = 'pan' | 'calibrate' | 'origin' | 'measure';
+type Tool = 'pan' | 'calibrate' | 'origin' | 'measure' | WallTool;
 
 export default function MapSetupPage() {
   const { campaignId = '', mapId = '' } = useParams();
@@ -35,7 +36,9 @@ function MapSetup({ campaignId, map, imageUrl }: { campaignId: string; map: MapD
   const [measure, setMeasure] = useState<[Point, Point] | null>(null);
   const [drag, setDrag] = useState<{ kind: 'pan' | 'line'; last: Point } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [savingWalls, setSavingWalls] = useState(false);
   const [imgError, setImgError] = useState(false);
+  const walls = useWallsEditor(map.walls, { w: map.widthPx, h: map.heightPx });
 
   const calibration = useMemo(() => {
     if (!a || !b) return null;
@@ -58,6 +61,7 @@ function MapSetup({ campaignId, map, imageUrl }: { campaignId: string; map: MapD
     (e.target as Element).setPointerCapture?.(e.pointerId);
     const p = vp.toMap(e.clientX, e.clientY);
     if (tool === 'pan' || e.button === 1 || e.button === 2) return setDrag({ kind: 'pan', last: { x: e.clientX, y: e.clientY } });
+    if (isWallTool(tool)) return walls.down(tool, p, cam.zoom);
     if (tool === 'calibrate') {
       setA(p);
       setB(p);
@@ -70,6 +74,7 @@ function MapSetup({ campaignId, map, imageUrl }: { campaignId: string; map: MapD
     }
   };
   const onPointerMove = (e: ReactPointerEvent) => {
+    if (isWallTool(tool) && !drag) return walls.move(tool, vp.toMap(e.clientX, e.clientY));
     if (!drag) return;
     if (drag.kind === 'pan') {
       vp.pan(e.clientX - drag.last.x, e.clientY - drag.last.y);
@@ -85,7 +90,36 @@ function MapSetup({ campaignId, map, imageUrl }: { campaignId: string; map: MapD
     if (tool === 'calibrate') setB(p);
     if (tool === 'measure') setMeasure((m) => (m ? [m[0], p] : m));
   };
-  const onPointerUp = () => setDrag(null);
+  const onPointerUp = () => {
+    if (isWallTool(tool) && !drag) walls.up(tool);
+    setDrag(null);
+  };
+
+  const saveWalls = async () => {
+    setSavingWalls(true);
+    try {
+      const w = walls.walls;
+      await campaignApi.updateMap(campaignId, map.id, { walls: w.rooms.length || w.doorways.length ? w : null });
+      walls.markSaved();
+      toast.success('Walls saved');
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSavingWalls(false);
+    }
+  };
+
+  // Development-only hook so end-to-end tests can aim at map coordinates.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    (window as unknown as { __d20setup?: unknown }).__d20setup = {
+      mapToClient: (p: Point) => {
+        const r = vp.ref.current?.getBoundingClientRect();
+        const s = mapToScreen(p, vp.camera);
+        return r ? { x: r.left + s.x, y: r.top + s.y } : null;
+      },
+    };
+  });
 
   const save = async () => {
     if (!ppm || !a || !b || calibration instanceof CalibrationError || !calibration) return;
@@ -245,6 +279,8 @@ function MapSetup({ campaignId, map, imageUrl }: { campaignId: string; map: MapD
           Save scale &amp; grid
         </Button>
         <p className="text-xs text-faint">Two-point calibration assumes a uniform, top-down map. Perspective or stretched images can't measure accurately everywhere.</p>
+
+        <WallsSection editor={walls} tool={tool} setTool={setTool} readOnly={!!map.walls?.generated} saving={savingWalls} onSave={() => void saveWalls()} />
       </aside>
 
       <div className="relative flex-1">
@@ -270,6 +306,7 @@ function MapSetup({ campaignId, map, imageUrl }: { campaignId: string; map: MapD
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
+          onDoubleClick={() => isWallTool(tool) && walls.doubleClick(tool)}
           onContextMenu={(e) => e.preventDefault()}
         >
           {imageUrl && !imgError ? (
@@ -305,6 +342,7 @@ function MapSetup({ campaignId, map, imageUrl }: { campaignId: string; map: MapD
                 <line x1={toScreen(measure[0]).x} y1={toScreen(measure[0]).y} x2={toScreen(measure[1]).x} y2={toScreen(measure[1]).y} stroke="#3e8ed0" strokeWidth={2} strokeDasharray="6 4" />
               </g>
             )}
+            <WallsOverlay editor={walls} toScreen={toScreen} />
             {ppm && grid.type !== 'none' && (
               <circle cx={toScreen({ x: grid.originX, y: grid.originY }).x} cy={toScreen({ x: grid.originX, y: grid.originY }).y} r={5} fill="none" stroke="#e5484d" strokeWidth={2} />
             )}
