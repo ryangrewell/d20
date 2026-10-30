@@ -10,9 +10,14 @@ export const MATERIALS = ['body', 'hair', 'cloth', 'metal', 'eye', 'wood'] as co
 export type Material = (typeof MATERIALS)[number];
 
 /** One colour slot of a part: which palette family it uses, and which palette its art is drawn in. */
-export type SpriteChannel = { key: string; label?: string; material: Material; base?: string; skin?: boolean };
-export type SpriteLayer = { z: number; src: Partial<Record<BodyType, string>> };
-export type SpriteItem = { id: string; name: string; tags?: string[]; layers: SpriteLayer[]; channels: SpriteChannel[]; credit: number[] };
+/** `from`: the part's own shades (dark to light) when its art matches none of the palettes. */
+export type SpriteChannel = { key: string; label?: string; material: Material; base?: string; from?: string[]; skin?: boolean };
+/** `variants`: for parts drawn in fixed colours (one file per colour) rather than recoloured. */
+export type SpriteLayer = { z: number; src: Partial<Record<BodyType, string>>; variants?: Record<string, Partial<Record<BodyType, string>>> };
+export type SpriteItem = { id: string; name: string; tags?: string[]; layers: SpriteLayer[]; channels: SpriteChannel[]; variants?: string[]; credit: number[] };
+
+/** The recipe colour key that picks a fixed-colour variant. */
+export const VARIANT_KEY = 'variant';
 export type SpriteCategory = { id: string; label: string; items: SpriteItem[] };
 export type SpriteAnimal = { id: string; name: string; src: string; credit: number[] };
 export type SpriteCredit = { authors: string[]; licenses: string[]; urls: string[]; notes?: string };
@@ -51,20 +56,24 @@ export function composePlan(m: SpriteManifest, r: SpriteRecipe): PlannedLayer[] 
   const entries = r.parts.some((p) => bodies.has(p.item)) ? r.parts : [{ item: BASE_BODY_ID }, ...r.parts];
   const out: (PlannedLayer & { order: number })[] = [];
   let order = 0;
-  for (const part of entries) {
+  for (const part of entries as SpriteRecipe['parts']) {
     const item = findItem(m, part.item);
     if (!item) continue;
     const swaps: PlannedLayer['swaps'] = [];
     for (const ch of item.channels) {
-      const target = ch.skin ? r.skin : (part as { colors?: Record<string, string> }).colors?.[ch.key];
+      const target = ch.skin ? r.skin : part.colors?.[ch.key];
       const base = ch.base ?? m.bases[ch.material];
-      if (!target || target === base) continue;
-      const from = m.palettes[ch.material]?.[base];
-      const to = m.palettes[ch.material]?.[target];
-      if (from && to) swaps.push({ from, to });
+      if (!target || (!ch.from && target === base)) continue;
+      const from = ch.from ?? m.palettes[ch.material]?.[base];
+      const shades = m.palettes[ch.material]?.[target];
+      if (!from || !shades) continue;
+      // Own shades map onto the target by brightness rank when the counts differ.
+      const to = from.length === shades.length ? shades : from.map((_, i) => shades[Math.round((i * (shades.length - 1)) / Math.max(1, from.length - 1))]!);
+      swaps.push({ from, to });
     }
+    const variant = part.colors?.[VARIANT_KEY];
     for (const layer of item.layers) {
-      const src = layer.src[r.body];
+      const src = (variant && layer.variants?.[variant]?.[r.body]) || layer.src[r.body];
       if (src) out.push({ src, z: layer.z, swaps, order: order++ });
     }
   }

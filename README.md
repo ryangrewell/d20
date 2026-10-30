@@ -37,7 +37,7 @@ To try GM and player side by side, use two different browsers or a private windo
 | `npm test` | Unit (shared domain), web, and integration tests. Integration tests run against DynamoDB Local + MinIO and skip if Docker infra is down |
 | `npm run e2e` | Playwright journeys (uses local Chrome; starts servers if needed) |
 | `npm run build` | Typecheck + production build |
-| `npx tsx scripts/build-sprites.ts --lpc <dir> --animals <dir>` | Rebuilds `public/sprites` (sprite builder parts, palettes, presets' art and credits) from a sparse checkout of the LPC character generator and the OpenGameArt wolf/dog/cat sheets. Only needed to change the art set |
+| `npx tsx scripts/build-sprites.ts --lpc <dir> --animals <dir> --modern <dir>` | Rebuilds `public/sprites` (sprite builder parts, palettes, presets' art and credits) from a sparse checkout of the LPC character generator, the OpenGameArt wolf/dog/cat sheets and the CC0 LPC shotgun sheet. Only needed to change the art set |
 | `npm run lockfile:check` | Confirms `npm ci` accepts the lock file (run after any dependency change; `npm run lockfile:fix` repairs it). npm 11 can write lock files that its own `npm ci` rejects, which fails the Amplify build |
 
 ## Layout

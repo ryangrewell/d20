@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { findItem, type SpriteManifest } from '../shared/sprites/compose';
+import { findItem, VARIANT_KEY, type SpriteManifest } from '../shared/sprites/compose';
 import { SPRITE_PRESETS } from '../shared/sprites/presets';
 
 const manifest = JSON.parse(readFileSync(new URL('../public/sprites/manifest.json', import.meta.url), 'utf8')) as SpriteManifest;
@@ -14,6 +14,10 @@ describe('sprite presets', () => {
       expect(item, part.item).toBeDefined();
       expect(item!.layers.some((l) => l.src[recipe.body]), `${part.item} has art for ${recipe.body}`).toBe(true);
       for (const [key, colour] of Object.entries(part.colors ?? {})) {
+        if (key === VARIANT_KEY) {
+          expect(item!.variants, `${part.item} variants`).toContain(colour);
+          continue;
+        }
         const ch = item!.channels.find((c) => c.key === key);
         expect(ch, `${part.item} colour slot ${key}`).toBeDefined();
         expect(manifest.palettes[ch!.material][colour], `${part.item} ${key}=${colour}`).toBeDefined();

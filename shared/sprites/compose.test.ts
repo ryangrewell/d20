@@ -43,9 +43,32 @@ describe('composePlan', () => {
     expect(composePlan(m, { v: 1, body: 'male', skin: 'light', parts: [{ item: 'skeleton' }] }).map((l) => l.src)).toEqual(['skel.png']);
   });
 
+  it('uses the chosen variant file for parts that come in fixed colours', () => {
+    const m: SpriteManifest = {
+      ...manifest,
+      categories: [...manifest.categories, { id: 'torso', label: 'Torso', items: [{ id: 'trench', name: 'Trench', layers: [{ z: 55, src: { male: 'trench-gray.png' }, variants: { gray: { male: 'trench-gray.png' }, dark_gray: { male: 'trench-dark.png' } } }], channels: [], variants: ['gray', 'dark_gray'], credit: [0] }] }],
+    };
+    const srcs = (variant?: string) => composePlan(m, { v: 1, body: 'male', skin: 'light', parts: [{ item: 'trench', ...(variant ? { colors: { variant } } : {}) }] }).map((l) => l.src);
+    expect(srcs('dark_gray')).toContain('trench-dark.png');
+    expect(srcs()).toContain('trench-gray.png');
+    expect(srcs('nope')).toContain('trench-gray.png');
+  });
+
   it('skips parts that have no art for the chosen body, and unknown parts', () => {
     const plan = composePlan(manifest, { v: 1, body: 'female', skin: 'light', parts: [{ item: 'mop' }, { item: 'nope' }] });
     expect(plan.map((l) => l.src)).toEqual(['b-f.png']);
+  });
+});
+
+describe('parts drawn in their own shades', () => {
+  it('maps their shades dark-to-light onto the chosen palette', () => {
+    const m: SpriteManifest = {
+      ...manifest,
+      palettes: { ...manifest.palettes, cloth: { navy: ['#000010', '#000020', '#000030', '#000040'] } },
+      categories: [...manifest.categories, { id: 'legs', label: 'Legs', items: [{ id: 'formal', name: 'Formal', layers: [{ z: 20, src: { male: 'formal.png' } }], channels: [{ key: 'color', material: 'cloth', from: ['#182611', '#203416', '#314f22'] }], credit: [0] }] }],
+    };
+    const plan = composePlan(m, { v: 1, body: 'male', skin: 'light', parts: [{ item: 'formal', colors: { color: 'navy' } }] });
+    expect(plan.find((l) => l.src === 'formal.png')!.swaps).toEqual([{ from: ['#182611', '#203416', '#314f22'], to: ['#000010', '#000030', '#000040'] }]);
   });
 });
 

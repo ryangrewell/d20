@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dices, ImagePlus, PawPrint, Shirt, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
-import { BODY_TYPES, type BodyType, type SpriteManifest, type SpriteRecipe } from '@shared/sprites/compose';
+import { BODY_TYPES, VARIANT_KEY, type BodyType, type SpriteManifest, type SpriteRecipe } from '@shared/sprites/compose';
 import { SPRITE_PRESETS } from '@shared/sprites/presets';
 import { RACES, randomRecipe } from '@shared/sprites/random';
 import type { SpriteSource } from '@shared/model';
@@ -206,6 +206,22 @@ export function SpriteBuilder({
                           ))}
                         </Select>
                       </Field>
+                      {item?.variants && (
+                        <Field label="Colour" htmlFor={`sb-${c.id}-variant`} className="mt-2">
+                          <Select
+                            id={`sb-${c.id}-variant`}
+                            className="h-8 text-xs"
+                            value={chosen?.colors?.[VARIANT_KEY] ?? item.variants[0]}
+                            onChange={(e) => setParts({ ...parts, [c.id]: { item: item.id, colors: { ...chosen?.colors, [VARIANT_KEY]: e.target.value } } })}
+                          >
+                            {item.variants.map((v) => (
+                              <option key={v} value={v}>
+                                {v.replace(/_/g, ' ')}
+                              </option>
+                            ))}
+                          </Select>
+                        </Field>
+                      )}
                       {item?.channels
                         .filter((ch) => !ch.skin)
                         .map((ch) => (

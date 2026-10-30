@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { findItem, type SpriteManifest } from '../shared/sprites/compose';
+import { findItem, VARIANT_KEY, type SpriteManifest } from '../shared/sprites/compose';
 import { RACES, randomRecipe } from '../shared/sprites/random';
 
 const manifest = JSON.parse(readFileSync(new URL('../public/sprites/manifest.json', import.meta.url), 'utf8')) as SpriteManifest;
@@ -18,10 +18,25 @@ describe('randomRecipe', () => {
         expect(item, part.item).toBeDefined();
         expect(item.layers.some((l) => l.src[recipe.body]), `${part.item} for ${recipe.body}`).toBe(true);
         for (const [key, colour] of Object.entries(part.colors ?? {})) {
+          if (key === VARIANT_KEY) {
+            expect(item.variants, `${part.item} variants`).toContain(colour);
+            continue;
+          }
           const ch = item.channels.find((c) => c.key === key)!;
           expect(manifest.palettes[ch.material][colour], `${part.item} ${key}`).toBeDefined();
         }
       }
+    }
+  });
+
+  it('dresses modern races in modern clothes, and keeps modern zombies unarmed', () => {
+    const fantasy = /armour|chainmail|plate|legion|helmet|sword_(?!dagger)|halberd|spear|staff|magic|bow|shield|cape_/;
+    for (let s = 1; s <= 40; s++) {
+      const human = randomRecipe(manifest, 'modern', seeded(s * 104729));
+      expect(human.parts.filter((p) => fantasy.test(p.item)).map((p) => p.item)).toEqual([]);
+      const zombie = randomRecipe(manifest, 'modern_zombie', seeded(s * 7));
+      expect(zombie.parts[0]!.item).toBe('heads_zombie');
+      expect(zombie.parts.some((p) => /^(weapon_|tool_)/.test(p.item))).toBe(false);
     }
   });
 

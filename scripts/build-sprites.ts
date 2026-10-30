@@ -1,6 +1,6 @@
 /**
  * Builds the sprite builder's art from Liberated Pixel Cup (LPC) sources:
- *   npx tsx scripts/build-sprites.ts --lpc <clone of Universal-LPC-Spritesheet-Character-Generator> --animals <dir with OpenGameArt wolf/dog/cat sheets>
+ *   npx tsx scripts/build-sprites.ts --lpc <clone of Universal-LPC-Spritesheet-Character-Generator> --animals <dir with OpenGameArt wolf/dog/cat sheets> --modern <dir with the OpenGameArt LPC shotgun sheet>
  *
  * The LPC clone needs only sheet_definitions/, palette_definitions/, idle sheets and weapon walk sheets
  * (a sparse checkout). For every part layer it keeps one standing, front-facing 64x64 frame, and it
@@ -19,6 +19,8 @@ const arg = (name: string) => {
 };
 const LPC = arg('lpc');
 const ANIMALS = arg('animals');
+/** Extra non-LPC-generator art (the CC0 shotgun sheet). */
+const MODERN = arg('modern');
 const OUT = join(process.cwd(), 'public/sprites');
 const FRAME = 64;
 /** Row of the front-facing (south) direction in LPC idle and walk sheets. */
@@ -50,6 +52,7 @@ const CATEGORY_RULES: [RegExp, string | null][] = [
   [/^weapons\/shields\/.*pattern/, null],
   [/^weapons\/shields\//, 'shield'],
   [/^weapons\//, 'weapon'],
+  [/^tools\//, 'weapon'],
 ];
 const MATERIAL_LABELS: Record<Material, string> = { body: 'Skin', hair: 'Hair', cloth: 'Colour', metal: 'Metal', eye: 'Eyes', wood: 'Wood' };
 const CATEGORY_LABELS: Record<string, string> = {
@@ -63,10 +66,14 @@ const CATEGORY_LABELS: Record<string, string> = {
   hair: 'Hair',
   beard: 'Beard',
   torso: 'Torso',
+  outer: 'Jacket & cape',
+  gear: 'Gear & belts',
   arms: 'Arms',
   legs: 'Legs',
   feet: 'Feet',
   headwear: 'Headwear',
+  face: 'Face (glasses, masks)',
+  neck: 'Neck',
   weapon: 'Weapon',
   shield: 'Shield',
   extras: 'Extras',
@@ -122,13 +129,66 @@ function frameFor(layerPath: string, variants: string[], wide = false): Rgba | n
   return null;
 }
 
+/**
+ * Some LPC parts are drawn in a palette other than their material's default and don't say so.
+ * For each colour slot without an explicit base, pick the palette whose colours cover the most
+ * of the part's pixels, so recolouring swaps the right shades.
+ */
+function detectBases(channels: SpriteChannel[], layers: SpriteItem['layers'], palettes: SpriteManifest['palettes']): SpriteChannel[] {
+  const src = layers.map((l) => l.src.male ?? l.src.female).find(Boolean);
+  if (!src) return channels;
+  const px = decodePng(readFileSync(join(OUT, src))).data;
+  const counts = new Map<string, number>();
+  for (let i = 0; i < px.length; i += 4) if (px[i + 3]) counts.set(`${px[i]},${px[i + 1]},${px[i + 2]}`, (counts.get(`${px[i]},${px[i + 1]},${px[i + 2]}`) ?? 0) + 1);
+  const hits = (shades: string[]) => {
+    let n = 0;
+    for (const c of shades) {
+      const [r, g, b] = [1, 3, 5].map((o) => parseInt(c.slice(o, o + 2), 16));
+      for (const [k, v] of counts) {
+        const [pr, pg, pb] = k.split(',').map(Number);
+        if (Math.abs(pr! - r!) <= 1 && Math.abs(pg! - g!) <= 1 && Math.abs(pb! - b!) <= 1) n += v;
+      }
+    }
+    return n;
+  };
+  const opaque = [...counts.values()].reduce((a, b) => a + b, 0);
+  const luma = (k: string) => k.split(',').map(Number).reduce((s, v, i) => s + v * [0.3, 0.59, 0.11][i]!, 0);
+  return channels.map((ch) => {
+    if (ch.base) return ch;
+    const ranked = Object.entries(palettes[ch.material]).map(([name, shades]) => [name, hits(shades)] as const).sort((a, b) => b[1] - a[1]);
+    const def = bases[ch.material];
+    const best = ranked[0];
+    // Drawn in shades no palette has: recolour from the part's own few colours, dark to light.
+    if (channels.length === 1 && (!best || best[1] < opaque * 0.3)) {
+      const own = [...counts].sort((a, b) => b[1] - a[1]).slice(0, 8);
+      if (own.reduce((n, [, v]) => n + v, 0) >= opaque * 0.9) {
+        const from = own.map(([k]) => k).sort((a, b) => luma(a) - luma(b)).map((k) => `#${k.split(',').map((v) => Number(v).toString(16).padStart(2, '0')).join('')}`);
+        return { ...ch, from };
+      }
+    }
+    // Only override when another palette clearly matches better than the default.
+    return best && best[0] !== def && best[1] > (ranked.find(([n]) => n === def)?.[1] ?? 0) ? { ...ch, base: best[0] } : ch;
+  });
+}
+
+/** A fixed-colour variant's front-facing standing frame. */
+function variantFrame(layerPath: string, variant: string): Rgba | null {
+  const p = layerPath.endsWith('/') ? layerPath : `${layerPath}/`;
+  for (const c of [`${p}idle/${variant}.png`, `${p}walk/${variant}.png`]) {
+    if (!existsSync(sheet(c))) continue;
+    const frame = crop(read(sheet(c)), 0, SOUTH_ROW * FRAME, FRAME, FRAME);
+    return isEmpty(frame) ? null : frame;
+  }
+  return null;
+}
+
 function paletteName(base: unknown): string | undefined {
   if (typeof base !== 'string') return undefined;
   const [scheme, name] = base.includes('.') ? (base.split('.') as [string, string]) : ['ulpc', base];
   return scheme === 'ulpc' ? name : undefined;
 }
 
-function channelsFor(def: Def, palettes: SpriteManifest['palettes'], isBody: boolean): SpriteChannel[] {
+function channelsFor(def: Def, palettes: SpriteManifest['palettes'], isBody: boolean, isHead = false): SpriteChannel[] {
   const rec = def.recolors as Record<string, unknown> | undefined;
   if (!rec) return [];
   const single = typeof rec.material === 'string' ? [['color', rec] as const] : Object.entries(rec).filter(([k]) => k.startsWith('color_'));
@@ -141,13 +201,31 @@ function channelsFor(def: Def, palettes: SpriteManifest['palettes'], isBody: boo
     const base = paletteName(r.base);
     if (r.base && !base) continue; // drawn in a palette scheme we don't ship
     if (base && !palettes[material][base]) continue;
-    const skin = material === 'body' && (isBody || !!def.match_body_color);
+    // Heads drawn in skin tones (zombies, orcs…) follow the chosen skin like the body does.
+    const skin = material === 'body' && (isBody || isHead || !!def.match_body_color);
     // Slots are skin, eyes, then color, color2, … in the order LPC lists them.
     const key = skin ? 'skin' : material === 'eye' ? 'eyes' : ++plain === 1 ? 'color' : `color${plain}`;
     const label = skin ? 'Skin' : material === 'eye' ? 'Eyes' : (r.label ?? MATERIAL_LABELS[material]);
     out.push({ key, label, material, ...(base ? { base } : {}), ...(skin ? { skin } : {}) });
   }
   return out;
+}
+
+/** Tiny hand-drawn pixel art: one character per pixel, keyed to colours ('.' is transparent). */
+const PISTOL = {
+  colors: { k: '#16161a', d: '#2e2f36', m: '#4d4f59', h: '#8a8d99' } as Record<string, string>,
+  rows: ['.kkk.', 'kdmhk', 'kdmhk', 'kkmhk', '.kdhk', '.kdmk', '.kdmk', '.kdmk', '..kk.'],
+};
+function pixelArt(art: typeof PISTOL, x0: number, y0: number): Rgba {
+  const data = new Uint8Array(FRAME * FRAME * 4);
+  art.rows.forEach((row, y) =>
+    [...row].forEach((ch, x) => {
+      const c = art.colors[ch];
+      if (!c) return;
+      data.set([parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16), 255], ((y0 + y) * FRAME + x0 + x) * 4);
+    }),
+  );
+  return { width: FRAME, height: FRAME, data };
 }
 
 // ---------------------------------------------------------------- build
@@ -184,23 +262,42 @@ const unresolved: string[] = [];
 const defsDir = join(LPC, 'sheet_definitions');
 for (const file of walk(defsDir).filter((f) => f.endsWith('.json') && !basename(f).startsWith('meta')).sort()) {
   const rel = relative(defsDir, file);
-  const category = CATEGORY_RULES.find(([re]) => re.test(rel))?.[1];
-  if (!category) continue;
+  const ruled = CATEGORY_RULES.find(([re]) => re.test(rel))?.[1];
+  if (!ruled) continue;
+  // Split crowded categories so a hat and glasses, or a shirt and a jacket, can be worn together.
+  const stem = basename(rel, '.json');
+  const category =
+    ruled === 'headwear' ? (stem.startsWith('facial_') ? 'face' : stem.startsWith('neck_') ? 'neck' : 'headwear') : ruled === 'torso' ? (/^(torso_jacket_|cape_|torso_aprons_)/.test(stem) ? 'outer' : /^(backpack|belt_|quiver)/.test(stem) ? 'gear' : 'torso') : ruled;
   const def = JSON.parse(readFileSync(file, 'utf8')) as Def;
   const variants = def.variants ?? [];
+  // Parts drawn in fixed colours (one file per colour) become selectable variants.
+  const fixedColours = variants.length > 0 && !def.recolors && category !== 'weapon' && category !== 'shield';
+  const variantNames: string[] = [];
   const layers: SpriteItem['layers'] = [];
   for (const key of Object.keys(def).filter((k) => /^layer_\d+$/.test(k)).sort()) {
     const layer = def[key as `layer_${number}`];
     if (!layer) continue;
     if (layer.custom_animation && layer.custom_animation !== 'walk_128') continue;
     const src: SpriteItem['layers'][number]['src'] = {};
+    const byVariant: NonNullable<SpriteItem['layers'][number]['variants']> = {};
     for (const bt of BODY_TYPES) {
       const path = layer[bt];
       if (typeof path !== 'string') continue;
+      if (fixedColours) {
+        for (const v of variants.map((x) => x.replace(/ /g, '_'))) {
+          const frame = variantFrame(path, v);
+          if (!frame) continue;
+          (byVariant[v] ??= {})[bt] = save(`${path}${v}`, frame);
+          if (!variantNames.includes(v)) variantNames.push(v);
+          src[bt] ??= byVariant[v][bt];
+        }
+        // Some parts list colours but ship a single sheet; use that as usual.
+        if (src[bt]) continue;
+      }
       const frame = frameFor(path, variants, layer.custom_animation === 'walk_128');
       if (frame) src[bt] = save(`${path}`, frame);
     }
-    if (Object.keys(src).length) layers.push({ z: layer.zPos, src });
+    if (Object.keys(src).length) layers.push({ z: layer.zPos, src, ...(Object.keys(byVariant).length ? { variants: byVariant } : {}) });
   }
   if (!layers.length) {
     unresolved.push(rel);
@@ -218,7 +315,8 @@ for (const file of walk(defsDir).filter((f) => f.endsWith('.json') && !basename(
     name: def.name,
     ...(def.tags?.length ? { tags: def.tags } : {}),
     layers,
-    channels: channelsFor(def, palettes, isBody),
+    channels: detectBases(channelsFor(def, palettes, isBody, category === 'head'), layers, palettes),
+    ...(variantNames.length ? { variants: variantNames } : {}),
     credit: (def.credits ?? []).map((c) => creditOf({ authors: c.authors ?? [], licenses: c.licenses ?? [], urls: c.urls ?? [], ...(c.notes ? { notes: c.notes } : {}) })),
   });
   categories.set(category, items);
@@ -268,6 +366,20 @@ PET_COLOURS.forEach((c, i) => {
   animal(`dog_${c.toLowerCase()}`, `${c} dog`, 'dog_2.png', i * 128, 0, 32, 32, PET_CREDIT);
   animal(`cat_${c.toLowerCase()}`, `${c} cat`, 'cat_0.png', i * 128, 0, 32, 32, PET_CREDIT);
 });
+
+// ---------------------------------------------------------------- modern weapons
+/** Adds a single-frame weapon (no recolouring) to the weapon category. */
+const extraWeapon = (id: string, name: string, frame: Rgba, z: number, credit: number) => {
+  const src = `lpc/${id}.png`;
+  writeFileSync(join(OUT, src), encodePng(frame));
+  (categories.get('weapon') ?? categories.set('weapon', []).get('weapon')!).push({ id, name, layers: [{ z, src: { male: src, female: src } }], channels: [], credit: [credit] });
+};
+// CC0 LPC shotgun by blancaster45: the classic sheet's front-facing walk row, held across the body.
+const SHOTGUN_CREDIT = creditOf({ authors: ['blancaster45'], licenses: ['CC0'], urls: ['https://opengameart.org/content/lpc-shotgun-animation-and-icon'], notes: 'LPC Shotgun Animation and Icon' });
+extraWeapon('weapon_shotgun', 'Shotgun', crop(read(join(MODERN, 'gunanimation.png')), 0, 10 * FRAME, FRAME, FRAME), 140, SHOTGUN_CREDIT);
+// A small pistol drawn for d20 (CC0), held pointing down in the character's right hand.
+const PISTOL_CREDIT = creditOf({ authors: ['d20'], licenses: ['CC0'], urls: [], notes: 'Pistol drawn for d20' });
+extraWeapon('weapon_pistol', 'Pistol', pixelArt(PISTOL, 15, 44), 140, PISTOL_CREDIT);
 
 const order = Object.keys(CATEGORY_LABELS);
 const manifest: SpriteManifest = {

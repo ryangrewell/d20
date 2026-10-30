@@ -1,5 +1,5 @@
 /** "Randomize" in the sprite builder: a believable outfit and colours for a chosen race. */
-import { BODY_TYPES, findItem, type BodyType, type SpriteManifest, type SpriteRecipe } from './compose';
+import { BODY_TYPES, findItem, VARIANT_KEY, type BodyType, type SpriteManifest, type SpriteRecipe } from './compose';
 
 type Race = {
   id: string;
@@ -13,6 +13,9 @@ type Race = {
   body?: string;
   hair?: boolean;
   beard?: number;
+  /** Which wardrobe random outfits come from (fantasy by default). */
+  outfit?: 'fantasy' | 'modern';
+  unarmed?: boolean;
 };
 
 export const RACES: Race[] = [
@@ -28,16 +31,29 @@ export const RACES: Race[] = [
   { id: 'vampire', label: 'Vampire', heads: { male: ['heads_vampire'], female: ['heads_vampire'] }, skins: ['lavender', 'light'], hair: true },
   { id: 'wolffolk', label: 'Wolf-folk', heads: { male: ['heads_wolf_male'], female: ['heads_wolf_female'] }, skins: ['fur_grey', 'fur_brown', 'fur_black', 'fur_tan', 'fur_white'] },
   { id: 'minotaur', label: 'Minotaur', heads: { male: ['heads_minotaur'], female: ['heads_minotaur_female'] }, skins: ['fur_brown', 'fur_tan', 'fur_black'], extras: [['feet_hoofs']] },
+  { id: 'modern', label: 'Modern human', heads: { male: ['heads_human_male', 'heads_human_male_gaunt', 'heads_human_male_plump', 'heads_human_male_elderly'], female: ['heads_human_female', 'heads_human_female_elderly'] }, skins: ['light', 'amber', 'olive', 'taupe', 'bronze', 'brown', 'black'], hair: true, beard: 0.25, outfit: 'modern' },
+  { id: 'modern_zombie', label: 'Modern zombie', heads: { male: ['heads_zombie'], female: ['heads_zombie'] }, skins: ['zombie', 'zombie_green'], hair: false, outfit: 'modern', unarmed: true },
   { id: 'boarfolk', label: 'Boar-folk', heads: { male: ['heads_boarman', 'heads_wartotaur'], female: ['heads_boarman'] }, skins: ['fur_brown', 'fur_black', 'fur_tan'] },
 ];
 
 /** Which parts make a sensible random outfit (by id pattern), and how often each slot is filled. */
-const SLOTS: { pick: RegExp; skip?: RegExp; chance: number }[] = [
+type Slot = { pick: RegExp; chance: number; weapon?: boolean };
+const MODERN_SLOTS: Slot[] = [
+  { pick: /^torso_clothes_(tshirt|shortsleeve|longsleeve|sleeveless|polo)/, chance: 0.97 },
+  { pick: /^torso_jacket_(collared|pockets|trench)$/, chance: 0.35 },
+  { pick: /^backpack_straps$/, chance: 0.2 },
+  { pick: /^legs_(pants|pants2|shorts|formal|cuffed|skirts_plain)$/, chance: 0.97 },
+  { pick: /^feet_(boots|shoes)_/, chance: 0.9 },
+  { pick: /^hat_(bandana|bandana2|cap_leather|headband_)/, chance: 0.2 },
+  { pick: /^facial_glasses/, chance: 0.2 },
+  { pick: /^(weapon_(pistol|shotgun|sword_dagger)|tool_(axe|hammer|shovel|pickaxe))$/, chance: 0.6, weapon: true },
+];
+const SLOTS: Slot[] = [
   { pick: /^torso_(clothes|armour)|^torso_chainmail$/, chance: 0.95 },
   { pick: /^legs_(pants|pants2|leggings|shorts|armour|skirts_plain|formal|cuffed)$/, chance: 0.95 },
   { pick: /^feet_(boots|shoes)_/, chance: 0.8 },
   { pick: /^hat_(helmet|hood|bandana|magic_wizard$)/, chance: 0.3 },
-  { pick: /^weapon_/, chance: 0.6 },
+  { pick: /^weapon_(?!pistol|shotgun)/, chance: 0.6, weapon: true },
   { pick: /^shield_(round|kite|heater_wood|spartan|crusader)$/, chance: 0.15 },
 ];
 
@@ -47,11 +63,12 @@ function hasArt(m: SpriteManifest, id: string, body: BodyType) {
   return !!findItem(m, id)?.layers.some((l) => l.src[body]);
 }
 
-/** Colours for each non-skin slot of a part, drawn from its palette family. */
+/** Colours for each non-skin slot of a part (and a fixed-colour variant), drawn at random. */
 function colorsFor(m: SpriteManifest, id: string, rand: () => number) {
   const item = findItem(m, id);
   const out: Record<string, string> = {};
   for (const ch of item?.channels ?? []) if (!ch.skin) out[ch.key] = pickFrom(Object.keys(m.palettes[ch.material]), rand);
+  if (item?.variants?.length) out[VARIANT_KEY] = pickFrom(item.variants, rand);
   return Object.keys(out).length ? out : undefined;
 }
 
@@ -74,8 +91,10 @@ export function randomRecipe(m: SpriteManifest, raceId: string, rand: () => numb
     if (hair.length && rand() < 0.9) add(pickFrom(hair, rand));
   }
   if (race.beard && body === 'male' && rand() < race.beard) add(pickFrom(all.filter((id) => /^beards_/.test(id) && hasArt(m, id, body)), rand));
-  // Skeletons wear little; everyone else gets a random outfit.
-  for (const slot of race.body ? SLOTS.slice(3) : SLOTS) {
+  // Skeletons wear little; everyone else gets a random outfit from their wardrobe.
+  const wardrobe = race.outfit === 'modern' ? MODERN_SLOTS : race.body ? SLOTS.slice(3) : SLOTS;
+  for (const slot of wardrobe) {
+    if (slot.weapon && race.unarmed) continue;
     if (rand() >= slot.chance) continue;
     const pool = all.filter((id) => slot.pick.test(id) && hasArt(m, id, body) && !parts.some((p) => p.item === id));
     if (pool.length) add(pickFrom(pool, rand));

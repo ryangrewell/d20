@@ -1,7 +1,7 @@
 /** Ready-made sprites to start from (and edit piece by piece). Part ids come from the LPC manifest. */
 import type { SpriteRecipe } from './compose';
 
-export type SpritePreset = { id: string; name: string; group: 'Heroes' | 'Townsfolk' | 'Monsters'; recipe: SpriteRecipe };
+export type SpritePreset = { id: string; name: string; group: 'Heroes' | 'Townsfolk' | 'Monsters' | 'Modern'; recipe: SpriteRecipe };
 
 const r = (body: SpriteRecipe['body'], skin: string, parts: SpriteRecipe['parts']): SpriteRecipe => ({ v: 1, body, skin, parts });
 const p = (item: string, colors?: Record<string, string>) => (colors ? { item, colors } : { item });
@@ -41,4 +41,19 @@ export const SPRITE_PRESETS: SpritePreset[] = [
   { id: 'ratfolk', name: 'Ratfolk thief', group: 'Monsters', recipe: r('female', 'light', [p('heads_rat'), p('torso_clothes_sleeveless1', { color: 'charcoal' }), p('legs_pants', { color: 'charcoal' }), p('weapon_sword_dagger')]) },
   { id: 'flesh_golem', name: 'Flesh golem', group: 'Monsters', recipe: r('male', 'pale_green', [p('heads_frankenstein'), p('torso_clothes_shortsleeve', { color: 'black' }), p('legs_pants', { color: 'black' }), p('feet_boots_basic', { color: 'black' })]) },
   { id: 'demon', name: 'Demon', group: 'Monsters', recipe: r('male', 'bright_green', [p('heads_human_male', { eyes: 'red' }), p('head_horns_curled'), p('wings_lizard_bat'), p('tail_lizard')]) },
+
+  // ---- modern (survivors, townsfolk and the walking dead)
+  { id: 'survivor', name: 'Survivor', group: 'Modern', recipe: r('male', 'light', [p('heads_human_male', { eyes: 'brown' }), p('hair_buzzcut', { color: 'dark_brown' }), p('torso_clothes_tshirt', { color: 'gray' }), p('torso_jacket_collared', { variant: 'leather' }), p('backpack_straps', { variant: 'black' }), p('legs_pants', { color: 'navy' }), p('feet_boots_basic', { color: 'black' }), p('weapon_shotgun')]) },
+  { id: 'survivor_scout', name: 'Scout', group: 'Modern', recipe: r('female', 'bronze', [p('heads_human_female', { eyes: 'green' }), p('hair_high_ponytail', { color: 'black' }), p('torso_clothes_tshirt_vneck', { color: 'forest' }), p('hat_bandana', { color: 'red' }), p('legs_pants', { color: 'navy' }), p('feet_boots_basic', { color: 'brown' }), p('weapon_pistol')]) },
+  { id: 'police_officer', name: 'Police officer', group: 'Modern', recipe: r('male', 'brown', [p('heads_human_male', { eyes: 'brown' }), p('hair_buzzcut', { color: 'black' }), p('torso_clothes_longsleeve2_buttoned', { color: 'navy' }), p('facial_glasses_sunglasses'), p('legs_pants', { color: 'navy' }), p('feet_shoes_basic', { color: 'black' }), p('weapon_pistol')]) },
+  { id: 'medic', name: 'Medic', group: 'Modern', recipe: r('female', 'light', [p('heads_human_female', { eyes: 'blue' }), p('hair_bob', { color: 'light_brown' }), p('torso_clothes_shortsleeve', { color: 'white' }), p('legs_pants', { color: 'white' }), p('feet_shoes_basic', { color: 'white' })]) },
+  { id: 'office_worker', name: 'Office worker', group: 'Modern', recipe: r('male', 'taupe', [p('heads_human_male', { eyes: 'gray' }), p('hair_parted', { color: 'dark_brown' }), p('torso_clothes_longsleeve2_buttoned', { color: 'white' }), p('neck_necktie', { color: 'red' }), p('facial_glasses_nerd'), p('legs_formal', { color: 'charcoal' }), p('feet_shoes_basic', { color: 'black' })]) },
+  { id: 'mechanic', name: 'Mechanic', group: 'Modern', recipe: r('male', 'olive', [p('heads_human_male', { eyes: 'brown' }), p('hair_messy1', { color: 'black' }), p('torso_clothes_tshirt', { color: 'white' }), p('torso_aprons_overalls'), p('legs_pants', { color: 'blue' }), p('feet_boots_basic', { color: 'black' }), p('tool_hammer')]) },
+  { id: 'hunter', name: 'Hunter', group: 'Modern', recipe: r('male', 'light', [p('heads_human_male_gaunt', { eyes: 'blue' }), p('beards_medium', { color: 'chestnut' }), p('torso_clothes_longsleeve', { color: 'forest' }), p('torso_jacket_trench', { variant: 'dark_gray' }), p('hat_cap_leather'), p('legs_pants', { color: 'brown' }), p('feet_boots_basic', { color: 'brown' }), p('weapon_shotgun')]) },
+  { id: 'lumberjack', name: 'Lumberjack', group: 'Modern', recipe: r('male', 'amber', [p('heads_human_male_plump', { eyes: 'brown' }), p('beards_beard', { color: 'redhead' }), p('torso_clothes_longsleeve', { color: 'red' }), p('legs_pants', { color: 'navy' }), p('feet_boots_basic', { color: 'brown' }), p('tool_axe')]) },
+  { id: 'zombie_office', name: 'Office zombie', group: 'Modern', recipe: r('male', 'zombie', [p('heads_zombie'), p('torso_clothes_longsleeve2_buttoned', { color: 'white' }), p('neck_necktie', { color: 'red' }), p('legs_formal', { color: 'charcoal' }), p('feet_shoes_basic', { color: 'black' })]) },
+  { id: 'zombie_civilian', name: 'Shambler', group: 'Modern', recipe: r('male', 'zombie_green', [p('heads_zombie'), p('torso_clothes_tshirt', { color: 'blue' }), p('legs_pants', { color: 'navy' }), p('feet_shoes_basic', { color: 'gray' })]) },
+  { id: 'zombie_cop', name: 'Zombie cop', group: 'Modern', recipe: r('male', 'zombie', [p('heads_zombie'), p('torso_clothes_longsleeve2_buttoned', { color: 'navy' }), p('legs_pants', { color: 'navy' }), p('feet_shoes_basic', { color: 'black' })]) },
+  { id: 'zombie_nurse', name: 'Zombie nurse', group: 'Modern', recipe: r('female', 'zombie_green', [p('heads_zombie'), p('torso_clothes_shortsleeve', { color: 'white' }), p('legs_pants', { color: 'white' }), p('feet_shoes_basic', { color: 'white' })]) },
+  { id: 'zombie_ragged', name: 'Ragged zombie', group: 'Modern', recipe: r('male', 'zombie', [p('heads_zombie'), p('torso_clothes_sleeveless1', { color: 'gray' }), p('cape_tattered', { color: 'brown' }), p('legs_shorts', { color: 'brown' })]) },
 ];
