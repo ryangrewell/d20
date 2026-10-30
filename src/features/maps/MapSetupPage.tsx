@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Crosshair, Hand, Maximize, Move, Ruler } from 'lucide-react';
 import { toast } from 'sonner';
 import { computeCalibration, distance, mapToScreen, type Point, CalibrationError } from '@shared/geometry/transform';
-import { DEFAULT_GRID_COLOR, GRID_COLOR_PRESETS, gridSpacingPixels, shouldDrawGrid, type GridType, type MapGrid } from '@shared/geometry/grid';
+import { DEFAULT_GRID_COLOR, GRID_COLOR_PRESETS, gridSpacingPixels, gridStride, shouldDrawGrid, type GridType, type MapGrid } from '@shared/geometry/grid';
 import { hexGridPolygons, squareGridSegments } from '@shared/geometry/gridLines';
 import { DISTANCE_UNITS, formatDistance, toMeters, UNIT_LABELS, type DistanceUnit } from '@shared/units';
 import type { MapDefinition } from '@shared/model';
@@ -53,9 +53,11 @@ function MapSetup({ campaignId, map, imageUrl }: { campaignId: string; map: MapD
   const cam = vp.camera;
 
   const view = { x: cam.x, y: cam.y, w: vp.size.w / cam.zoom, h: vp.size.h / cam.zoom };
-  const drawGrid = ppm && grid.type !== 'none' && grid.showEnabled && shouldDrawGrid(spacing, cam.zoom);
-  const segments = drawGrid && grid.type === 'square' ? squareGridSegments(grid, spacing, view) : [];
-  const hexes = drawGrid && grid.type === 'hex' ? hexGridPolygons(grid, spacing, view) : [];
+  const showGrid = ppm && grid.type !== 'none' && grid.showEnabled;
+  // A square grid too dense for the zoom thins to every Nth line rather than vanishing; hexes can't.
+  const stride = showGrid && grid.type === 'square' ? gridStride(spacing, cam.zoom) : 0;
+  const segments = stride ? squareGridSegments(grid, spacing * stride, view) : [];
+  const hexes = showGrid && grid.type === 'hex' && shouldDrawGrid(spacing, cam.zoom) ? hexGridPolygons(grid, spacing, view) : [];
 
   const onPointerDown = (e: ReactPointerEvent) => {
     (e.target as Element).setPointerCapture?.(e.pointerId);
@@ -99,7 +101,7 @@ function MapSetup({ campaignId, map, imageUrl }: { campaignId: string; map: MapD
     setSavingWalls(true);
     try {
       const w = walls.walls;
-      await campaignApi.updateMap(campaignId, map.id, { walls: w.rooms.length || w.doorways.length ? w : null });
+      await campaignApi.updateMap(campaignId, map.id, { walls: w.rooms.length || w.doorways.length || w.lines?.length ? w : null });
       walls.markSaved();
       toast.success('Walls saved');
     } catch (e) {
@@ -230,7 +232,8 @@ function MapSetup({ campaignId, map, imageUrl }: { campaignId: string; map: MapD
           {ppm && grid.type !== 'none' && (
             <p className="text-xs text-faint">
               One cell = {spacing.toFixed(2)} native px
-              {spacing < 4 && (
+              {stride > 1 && <span className="mt-1 block">Zoomed out: showing 1 in every {stride} lines.</span>}
+              {spacing < 4 && grid.type === 'hex' && (
                 <span className="mt-1 flex items-center gap-1 text-accent">
                   <AlertTriangle className="h-3 w-3" aria-hidden /> Very dense; it will hide when zoomed out.
                 </span>
@@ -283,7 +286,7 @@ function MapSetup({ campaignId, map, imageUrl }: { campaignId: string; map: MapD
         <WallsSection editor={walls} tool={tool} setTool={setTool} readOnly={!!map.walls?.generated} saving={savingWalls} onSave={() => void saveWalls()} />
       </aside>
 
-      <div className="relative flex-1">
+      <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
         <div className="absolute left-3 top-3 z-10 flex gap-1 rounded-lg border border-border bg-surface/90 p-1 backdrop-blur" role="toolbar" aria-label="Map tools">
           {tools.map((t) => (
             <Button key={t.id} size="icon" variant={tool === t.id ? 'secondary' : 'ghost'} title={t.label} aria-label={t.label} aria-pressed={tool === t.id} disabled={t.disabled} onClick={() => setTool(t.id)}>
@@ -302,7 +305,7 @@ function MapSetup({ campaignId, map, imageUrl }: { campaignId: string; map: MapD
         )}
         <div
           ref={vp.ref}
-          className={cn('h-full w-full touch-none overflow-hidden bg-[#0b0a0f]', tool === 'pan' ? 'cursor-grab' : 'cursor-crosshair')}
+          className={cn('relative h-full w-full touch-none overflow-hidden bg-[#0b0a0f]', tool === 'pan' ? 'cursor-grab' : 'cursor-crosshair')}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}

@@ -31,6 +31,19 @@ export function shouldDrawGrid(spacingPx: number, zoom: number): boolean {
   return spacingPx * zoom >= MIN_SCREEN_GRID_SPACING;
 }
 
+/**
+ * Draw every Nth line (1, 2, 5, 10, 20, 50…) so a grid too dense for the zoom still shows as a
+ * coarser guide whose lines sit on real cell edges. 0 when the spacing is unusable.
+ */
+export function gridStride(spacingPx: number, zoom: number): number {
+  const screen = spacingPx * zoom;
+  if (!(screen > 0)) return 0;
+  for (let decade = 1; decade < 1e9; decade *= 10) {
+    for (const k of [1, 2, 5]) if (screen * k * decade >= MIN_SCREEN_GRID_SPACING) return k * decade;
+  }
+  return 0;
+}
+
 function toLocal(p: Point, grid: Pick<MapGrid, 'originX' | 'originY' | 'rotationRadians'>): Point {
   const dx = p.x - grid.originX;
   const dy = p.y - grid.originY;

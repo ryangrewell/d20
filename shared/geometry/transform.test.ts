@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { computeCalibration, distanceToPixels, fitCamera, mapToScreen, pixelsToDistance, screenToMap, zoomAt, CalibrationError, distance } from './transform';
 import { fromMeters, toMeters, convert, formatDistance } from '../units';
-import { gridSpacingPixels, shouldDrawGrid, snapToGrid, DEFAULT_GRID } from './grid';
+import { gridSpacingPixels, gridStride, shouldDrawGrid, snapToGrid, DEFAULT_GRID } from './grid';
 
 describe('units', () => {
   it('converts exactly', () => {
@@ -44,6 +44,15 @@ describe('two-point calibration (spec section 5.2)', () => {
     // Too dense to draw at low zoom, drawable when zoomed in.
     expect(shouldDrawGrid(7.5758, 0.5)).toBe(false);
     expect(shouldDrawGrid(7.5758, 2)).toBe(true);
+  });
+
+  it('thins a too-dense grid to every 2nd, 5th, 10th… line instead of hiding it', () => {
+    expect(gridStride(10, 1)).toBe(1);
+    expect(gridStride(3.37, 1)).toBe(2);
+    expect(gridStride(3.37, 0.85)).toBe(5);
+    expect(gridStride(3.37, 0.1)).toBe(20);
+    expect(gridStride(0.001, 1)).toBe(10000);
+    expect(gridStride(0, 1)).toBe(0);
   });
 
   it('measures distances on an interior map (30 ft reference)', () => {
