@@ -58,6 +58,7 @@ export const CommandPayloads = {
         gmStats: GmStats,
         characterId: Id.nullable(),
         portal: z.object({ targetSceneId: Id }).nullable(),
+        lightRadiusMeters: z.number().min(0).max(100).nullable(),
       })
       .partial(),
   }),

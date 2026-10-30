@@ -13,6 +13,7 @@ import { Id, plainText } from '@shared/schemas/common';
 import { keys, type TxItem } from '../repo/db';
 import { loadCampaign, requireActiveCampaign, requireGM, type Actor, type Deps } from '../context';
 import { mapItem, sceneItem, verifyUploadedImage } from './maps';
+import { floorplanToWalls, type MapWalls } from '@shared/lighting/walls';
 import { objectItem } from './commands';
 
 export const FloorplanInputSchema = z.object({
@@ -49,6 +50,14 @@ export type FloorplanRecord = {
 };
 
 const ASPECT_TOLERANCE = 0.01;
+
+/** A generated floor's walls in map pixels, with the GM's room names applied. */
+export function generatedWalls(fp: Floorplan, level: number, pxPerMeter: number, roomNames: Record<string, string>): MapWalls | null {
+  const floor = fp.floors.find((f) => f.level === level);
+  if (!floor) return null;
+  const walls = floorplanToWalls(floor, pxPerMeter);
+  return { ...walls, rooms: walls.rooms.map((r) => (roomNames[r.id] ? { ...r, name: roomNames[r.id] } : r)) };
+}
 
 export function regenerate(input: FloorplanInput): Floorplan {
   let fp: Floorplan;
@@ -91,6 +100,7 @@ export async function createFloorplan(deps: Deps, actor: Actor, campaignId: stri
       heightPx: height,
       calibration: { a: { x: 0, y: 0 }, b: { x: width, y: 0 }, enteredDistance: body.input.width, enteredUnit: unitLabel, pixelsPerMeter: width / fp.widthM },
       grid: { type: 'square', intervalMeters: fp.cellM, displayInterval: unitLabel === 'ft' ? 5 : 1.5, displayUnit: unitLabel, originX: 0, originY: 0, rotationRadians: 0, snapEnabled: true, showEnabled: true, opacity: 0.7, color: THEME_GRID_COLORS[body.input.theme] },
+      ...((w) => (w ? { walls: w } : {}))(generatedWalls(fp, floor.level, width / fp.widthM, body.roomNames)),
       createdAt: now,
       updatedAt: now,
     };

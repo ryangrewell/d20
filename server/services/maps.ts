@@ -7,6 +7,7 @@ import type { CreateSceneInput, FinalizeMapInput, UpdateMapInput, UpdateSceneInp
 import { keys, type TxItem } from '../repo/db';
 import { loadCampaign, requireActiveCampaign, requireGM, type Actor, type Deps } from '../context';
 import { rateLimit } from './rateLimit';
+import { loadMapWalls } from './mapWalls';
 
 export async function gmContext(deps: Deps, actor: Actor, campaignId: string) {
   const ctx = await loadCampaign(deps, actor, campaignId);
@@ -97,7 +98,8 @@ export async function getMap(deps: Deps, actor: Actor, campaignId: string, mapId
   const map = await deps.db.get<MapDefinition>(keys.map(campaignId, mapId));
   if (!map) throw notFound('Map');
   const asset = await deps.db.get<MapAsset>(keys.asset(campaignId, map.assetId));
-  return { map, imageUrl: asset ? await deps.blobs.presignGet(asset.s3Key, 3600) : null };
+  const walls = await loadMapWalls(deps, map);
+  return { map: walls ? { ...map, walls } : map, imageUrl: asset ? await deps.blobs.presignGet(asset.s3Key, 3600) : null };
 }
 
 export async function updateMap(deps: Deps, actor: Actor, campaignId: string, mapId: string, input: z.output<typeof UpdateMapInput>) {
@@ -119,6 +121,12 @@ export async function updateMap(deps: Deps, actor: Actor, campaignId: string, ma
     next.calibration = c;
   }
   if (next.grid.type !== 'none' && !next.calibration) throw invalid('Calibrate the map scale before enabling a grid.');
+  if (input.walls === null) delete next.walls;
+  else if (input.walls) {
+    const inside = (p: { x: number; y: number }) => p.x >= 0 && p.y >= 0 && p.x <= map.widthPx && p.y <= map.heightPx;
+    if (!input.walls.rooms.every((r) => r.points.every(inside)) || !input.walls.doorways.every((d) => inside(d.a) && inside(d.b))) throw invalid('Rooms and doorways must be on the map.');
+    next.walls = input.walls;
+  }
   await deps.db.put({ ...keys.map(campaignId, mapId), entity: 'Map', ...next });
   return next;
 }

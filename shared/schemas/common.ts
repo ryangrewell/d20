@@ -39,6 +39,12 @@ export const GridSchema = z.object({
   color: z.string().regex(/^#[0-9a-f]{6}$/i, 'Use a #rrggbb color').optional(),
 });
 
+const Segment = z.object({ a: Point, b: Point });
+export const MapWallsSchema = z.object({
+  rooms: z.array(z.object({ id: z.string().min(1).max(40), name: z.string().max(80).optional(), points: z.array(Point).min(3).max(200) })).max(200),
+  doorways: z.array(Segment).max(400),
+});
+
 export const CalibrationSchema = z.object({
   a: Point,
   b: Point,

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CalibrationSchema, DisplayName, GridSchema, HttpsUrl, Id, Point, plainText, HexColor, UserSub } from './common';
+import { CalibrationSchema, DisplayName, GridSchema, MapWallsSchema, HttpsUrl, Id, Point, plainText, HexColor, UserSub } from './common';
 import { FOG_LIMITS } from '../fog';
 
 // ------------------------------------------------------------------ profile
@@ -74,6 +74,7 @@ export const UpdateMapInput = z.object({
   category: z.enum(MAP_CATEGORIES).optional(),
   calibration: CalibrationSchema.nullable().optional(),
   grid: GridSchema.optional(),
+  walls: MapWallsSchema.nullable().optional(),
 });
 
 // ------------------------------------------------------------------- scenes

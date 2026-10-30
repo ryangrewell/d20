@@ -1,4 +1,5 @@
 /** Persisted domain entities. GM-only fields are marked; projections strip them for players. */
+import type { MapWalls } from './lighting/walls';
 import type { MapGrid } from './geometry/grid';
 import type { ScaleCalibration, Point } from './geometry/transform';
 import type { FogOp } from './fog';
@@ -141,7 +142,11 @@ export type MapDefinition = {
   grid: MapGrid;
   createdAt: string;
   updatedAt: string;
+  /** Rooms and doorways for automatic fog reveal; generated maps get these from the floorplan. */
+  walls?: MapWalls;
 };
+
+export type SceneLighting = { torch: 'off' | 'remember' | 'live'; roomReveal: boolean };
 
 export type Scene = {
   id: string;
@@ -155,6 +160,8 @@ export type Scene = {
   gmNotes?: string;
   createdAt: string;
   updatedAt: string;
+  /** GM's fog automation for this scene; absent = all off. */
+  lighting?: SceneLighting;
 };
 
 export type ObjectVisibility = 'GM_ONLY' | 'VISIBLE_TO_ALL' | 'SELECTED_PLAYERS';
