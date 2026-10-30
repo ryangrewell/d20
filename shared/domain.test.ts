@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseDice, rollDice, DiceError, describeRoll } from './dice/dice';
 import { isFogged, type FogState } from './fog';
+import { createExplored, markPolygon } from './lighting/explored';
 import { channelPath, parseChannel } from './events';
 import { sniffImage } from './image';
 import { canViewerSeeObject } from './projection';
@@ -113,5 +114,21 @@ describe('GM delegation', () => {
     expect(resolveAccess(member, [d({ kind: 'SESSIONS', sessionIds: ['s3'] })], s3).isGM).toBe(true);
     expect(resolveAccess(member, [], s3).isGM).toBe(false);
     expect(resolveAccess({ ...member, status: 'REMOVED' }, [], s3).canView).toBe(false);
+  });
+});
+
+describe('fog layers', () => {
+  const square = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }];
+  const explored = createExplored(600, 400);
+  markPolygon(explored, square);
+  const p = { x: 50, y: 50 };
+  it('explored areas show through the initial cover', () => {
+    expect(isFogged({ initial: 'covered', ops: [], explored }, p)).toBe(false);
+  });
+  it("the GM's later conceal beats explored", () => {
+    expect(isFogged({ initial: 'covered', ops: [{ mode: 'conceal', shape: { kind: 'rect', x: 0, y: 0, w: 100, h: 100 } }], explored }, p)).toBe(true);
+  });
+  it('current light beats everything', () => {
+    expect(isFogged({ initial: 'covered', ops: [{ mode: 'conceal', shape: { kind: 'rect', x: 0, y: 0, w: 100, h: 100 } }], explored, lights: [{ kind: 'polygon', points: square }] }, p)).toBe(false);
   });
 });

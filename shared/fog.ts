@@ -4,6 +4,7 @@
  * the same operations, so "is this point hidden from players?" has one answer.
  */
 import type { Point } from './geometry/transform';
+import { exploredContains, type ExploredGrid } from './lighting/explored';
 
 export type FogShape =
   | { kind: 'rect'; x: number; y: number; w: number; h: number }
@@ -15,6 +16,10 @@ export type FogOp = { mode: 'reveal' | 'conceal'; shape: FogShape };
 export type FogState = {
   initial: 'covered' | 'revealed';
   ops: FogOp[];
+  /** Area revealed automatically (rooms walked into, remembered torchlight). Below the GM's ops. */
+  explored?: ExploredGrid;
+  /** Current light from party tokens. Shows through everything. */
+  lights?: FogShape[];
 };
 
 export const FOG_LIMITS = { maxPolygonPoints: 200, maxBrushPoints: 400, maxOpsPerScene: 5000 };
@@ -55,11 +60,13 @@ export function shapeContains(shape: FogShape, p: Point): boolean {
   }
 }
 
-/** True when players cannot see map point `p`. Last operation covering the point wins. */
+/** True when players cannot see map point `p`: light, then the GM's ops (last wins), then explored, then the initial state. */
 export function isFogged(fog: FogState, p: Point): boolean {
+  if (fog.lights?.some((s) => shapeContains(s, p))) return false;
   for (let i = fog.ops.length - 1; i >= 0; i--) {
     const op = fog.ops[i]!;
     if (shapeContains(op.shape, p)) return op.mode === 'conceal';
   }
+  if (fog.explored && exploredContains(fog.explored, p)) return false;
   return fog.initial === 'covered';
 }

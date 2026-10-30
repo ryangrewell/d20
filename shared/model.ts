@@ -190,6 +190,8 @@ export type SceneObject = {
   revision: number;
   createdAt: string;
   updatedAt: string;
+  /** GM-set torchlight radius; party tokens only. */
+  lightRadiusMeters?: number;
 };
 
 export type LootEntry = { id: string; name: string; description?: string; quantity: number };

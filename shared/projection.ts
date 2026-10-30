@@ -2,6 +2,7 @@
  * Audience projections. The server builds every snapshot and event payload
  * through these functions so players never receive GM-only data.
  */
+import { isPartyToken } from './lighting/light';
 import { isFogged, type FogState } from './fog';
 import type { GameSession, InitiativeState, Scene, SceneObject } from './model';
 
@@ -19,8 +20,7 @@ export function canViewerSeeObject(obj: SceneObject, viewer: Viewer, fog: FogSta
   if (obj.visibility === 'GM_ONLY') return false;
   if (obj.visibility === 'SELECTED_PLAYERS' && !obj.allowedViewerIds?.includes(viewer.sub)) return false;
   // Party tokens stay visible under fog; everything else hidden by fog is not sent.
-  const partyToken = obj.objectType === 'PC' || !!obj.assignedControllerSub;
-  if (!partyToken && isFogged(fog, { x: obj.x, y: obj.y })) return false;
+  if (!isPartyToken(obj) && isFogged(fog, { x: obj.x, y: obj.y })) return false;
   return true;
 }
 
