@@ -59,6 +59,7 @@ export const CommandPayloads = {
         characterId: Id.nullable(),
         portal: z.object({ targetSceneId: Id }).nullable(),
         lightRadiusMeters: z.number().min(0).max(100).nullable(),
+        imageAssetId: Id.nullable(),
       })
       .partial(),
   }),

@@ -1,5 +1,6 @@
 /** Persisted domain entities. GM-only fields are marked; projections strip them for players. */
 import type { MapWalls } from './lighting/walls';
+import type { SpriteRecipe } from './sprites/compose';
 import type { MapGrid } from './geometry/grid';
 import type { ScaleCalibration, Point } from './geometry/transform';
 import type { FogOp } from './fog';
@@ -116,6 +117,9 @@ export type GameSession = {
 
 export type MapCategory = 'world' | 'region' | 'city' | 'outdoor' | 'building' | 'floor' | 'dungeon' | 'encounter' | 'other';
 
+/** How a picture was made, so the sprite builder can reopen it. */
+export type SpriteSource = { kind: 'lpc'; recipe: SpriteRecipe } | { kind: 'animal'; id: string } | { kind: 'upload' };
+
 export type MapAsset = {
   id: string;
   campaignId: string;
@@ -125,6 +129,8 @@ export type MapAsset = {
   widthPx: number;
   heightPx: number;
   status: 'PENDING' | 'READY';
+  /** Absent on map uploads; 'image' for character, creature and token pictures. */
+  kind?: 'image';
   uploadedBy: string;
   createdAt: string;
 };
@@ -218,6 +224,9 @@ export type CreatureTemplate = {
   notes: string;
   createdAt: string;
   updatedAt: string;
+  /** Picture for the sheet and tokens (an uploaded portrait or a built sprite). */
+  imageAssetId?: string;
+  sprite?: SpriteSource;
 };
 
 export type EncounterTemplate = {
@@ -262,6 +271,9 @@ export type Character = {
   revision: number;
   createdAt: string;
   updatedAt: string;
+  /** Picture for the sheet and tokens (an uploaded portrait or a built sprite). */
+  imageAssetId?: string;
+  sprite?: SpriteSource;
 };
 
 export type ItemState = 'EQUIPPED' | 'CARRIED' | 'STASHED';

@@ -10,6 +10,7 @@ import { loadCampaign, requireActiveCampaign, requireGM, type Actor, type Deps }
 import type { Change } from '../realtime/fanout';
 import { objectItem, requireGM as requireGMCommand, requirePlayable, type Handler } from './commands';
 import { loadFog, loadSceneObjects } from './sessions';
+import { requireImage } from './images';
 
 const MAX_SPAWN = 30;
 
@@ -48,9 +49,11 @@ export async function createQuickEncounter(deps: Deps, actor: Actor, campaignId:
   if (reused.length) await validateGroups(deps, campaignId, reused);
   const now = deps.now().toISOString();
   const created: CreatureTemplate[] = [];
+  for (const g of input.groups) if ('creature' in g && g.creature.imageAssetId) await requireImage(deps, campaignId, g.creature.imageAssetId);
   const groups = input.groups.map((g) => {
     if ('creatureId' in g) return { creatureId: g.creatureId, count: g.count };
-    const t: CreatureTemplate = { id: ulid(), campaignId, ...g.creature, createdAt: now, updatedAt: now };
+    const { imageAssetId, sprite, ...stats } = g.creature;
+    const t: CreatureTemplate = { id: ulid(), campaignId, ...stats, ...(imageAssetId ? { imageAssetId } : {}), ...(sprite ? { sprite } : {}), createdAt: now, updatedAt: now };
     created.push(t);
     return { creatureId: t.id, count: g.count };
   });
@@ -119,7 +122,7 @@ export const spawnEncounter: Handler<'spawnEncounter'> = async (ctx, p) => {
       rotationRadians: 0,
       zIndex: ++z,
       visibility: p.visibility,
-      appearance: { label: n ? `${t.name} ${n}` : t.name, tint: t.tint },
+      appearance: { label: n ? `${t.name} ${n}` : t.name, tint: t.tint, ...(t.imageAssetId ? { imageAssetId: t.imageAssetId } : {}) },
       revision: 1,
       createdAt: now,
       updatedAt: now,

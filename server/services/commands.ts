@@ -25,6 +25,7 @@ import { pickupLoot } from './loot';
 import { spawnEncounter } from './encounters';
 import { isUndoable, undoLast, undoWrite } from './undo';
 import { restoreCheckpoint } from './checkpoints';
+import { requireImage } from './images';
 import { lightingGuards, lightingOn, lightingRace, lightingUpdate, sceneGeometry } from './lighting';
 import { isPartyToken } from '@shared/lighting/light';
 
@@ -158,7 +159,7 @@ const handlers: { [K in CommandType]: Handler<K> } = {
       rotationRadians: 0,
       zIndex: existing.reduce((m, o) => Math.max(m, o.zIndex), 0) + 1,
       visibility: p.visibility,
-      appearance: { ...(label ? { label } : {}), ...(tint ? { tint } : {}) },
+      appearance: { ...(label ? { label } : {}), ...(tint ? { tint } : {}), ...((template?.imageAssetId ?? character?.imageAssetId) ? { imageAssetId: (template?.imageAssetId ?? character?.imageAssetId)! } : {}) },
       revision: 1,
       createdAt: now,
       updatedAt: now,
@@ -185,7 +186,7 @@ const handlers: { [K in CommandType]: Handler<K> } = {
     const { obj, scene, fog } = await loadObjectFor(ctx, p.objectId, await findObjectScene(ctx, p.objectId));
     if (p.patch.assignedControllerSub) await requireMember(ctx, p.patch.assignedControllerSub);
     const after: SceneObject = { ...obj, revision: obj.revision + 1, updatedAt: ctx.deps.now().toISOString() };
-    const { label, tint, assignedControllerSub, allowedViewerIds, characterId, gmStats, conditions, portal, lightRadiusMeters, ...rest } = p.patch;
+    const { label, tint, assignedControllerSub, allowedViewerIds, characterId, gmStats, conditions, portal, lightRadiusMeters, imageAssetId, ...rest } = p.patch;
     Object.assign(after, rest);
     if (portal === null) delete after.portal;
     else if (portal) after.portal = await requirePortalTarget(ctx, portal.targetSceneId);
@@ -197,6 +198,13 @@ const handlers: { [K in CommandType]: Handler<K> } = {
       after.characterId = characterId;
     }
     if (label !== undefined || tint !== undefined) after.appearance = { ...obj.appearance, ...(label !== undefined ? { label } : {}), ...(tint !== undefined ? { tint } : {}) };
+    if (imageAssetId) {
+      await requireImage(ctx.deps, obj.campaignId, imageAssetId);
+      after.appearance = { ...after.appearance, imageAssetId };
+    } else if (imageAssetId === null) {
+      const { imageAssetId: _gone, ...rest2 } = after.appearance;
+      after.appearance = rest2;
+    }
     if (assignedControllerSub === null) delete after.assignedControllerSub;
     else if (assignedControllerSub) after.assignedControllerSub = assignedControllerSub;
     if (allowedViewerIds) after.allowedViewerIds = allowedViewerIds;

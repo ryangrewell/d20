@@ -20,6 +20,8 @@ import {
   UpdateProfileInput,
   UpdateSceneInput,
   UploadMapIntentInput,
+  ImageUploadIntentInput,
+  FinalizeImageInput,
 } from '@shared/schemas/api';
 import { HttpsUrl, plainText } from '@shared/schemas/common';
 import { resolveActor, type Actor, type Deps } from '../context';
@@ -28,6 +30,7 @@ import * as campaigns from '../services/campaigns';
 import * as invites from '../services/invites';
 import * as sessions from '../services/sessions';
 import * as maps from '../services/maps';
+import * as images from '../services/images';
 import { executeCommand } from '../services/commands';
 import * as characters from '../services/characters';
 import * as creatures from '../services/creatures';
@@ -158,6 +161,9 @@ export function createApp(deps: Deps, verify: TokenVerifier, extra?: (app: Hono<
   app.post('/campaigns/:cid/maps', async (c) => c.json(await maps.finalizeMap(deps, c.get('actor'), id(c, 'cid'), await body(c, FinalizeMapInput)), 201));
   app.get('/campaigns/:cid/maps/:mid', async (c) => c.json(await maps.getMap(deps, c.get('actor'), id(c, 'cid'), id(c, 'mid'))));
   app.patch('/campaigns/:cid/maps/:mid', async (c) => c.json(await maps.updateMap(deps, c.get('actor'), id(c, 'cid'), id(c, 'mid'), await body(c, UpdateMapInput))));
+  app.post('/campaigns/:cid/images/upload-intent', async (c) => c.json(await images.uploadImageIntent(deps, c.get('actor'), id(c, 'cid'), await body(c, ImageUploadIntentInput))));
+  app.post('/campaigns/:cid/images', async (c) => c.json(await images.finalizeImage(deps, c.get('actor'), id(c, 'cid'), await body(c, FinalizeImageInput))));
+  app.get('/campaigns/:cid/images/:aid', async (c) => c.json(await images.imageLink(deps, c.get('actor'), id(c, 'cid'), id(c, 'aid'))));
   app.delete('/campaigns/:cid/maps/:mid', async (c) => c.json(await maps.deleteMap(deps, c.get('actor'), id(c, 'cid'), id(c, 'mid'))));
   app.post('/campaigns/:cid/scenes', async (c) => c.json(await maps.createScene(deps, c.get('actor'), id(c, 'cid'), await body(c, CreateSceneInput)), 201));
   app.patch('/campaigns/:cid/scenes/:scid', async (c) => c.json(await maps.updateScene(deps, c.get('actor'), id(c, 'cid'), id(c, 'scid'), await body(c, UpdateSceneInput))));

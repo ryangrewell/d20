@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { HexColor, UserSub, plainText } from './common';
+import { HexColor, Id, SpriteSourceSchema, UserSub, plainText } from './common';
 
 export const ConditionList = z.array(plainText(40).pipe(z.string().min(1))).max(30);
 
@@ -18,6 +18,9 @@ export const UpdateCharacterInput = z.object({
   conditions: ConditionList.optional(),
   ownerSub: UserSub.optional(),
   gmNotes: plainText(10000).optional(),
+  /** Picture shown on the sheet and on the character's tokens; null removes it. */
+  imageAssetId: Id.nullable().optional(),
+  sprite: SpriteSourceSchema.nullable().optional(),
 });
 
 export const ItemInput = z.object({
@@ -52,6 +55,8 @@ export const CreatureInput = z.object({
   ac: z.number().int().min(0).max(100).optional(),
   initiativeMod: z.number().int().min(-50).max(50).default(0),
   notes: plainText(10000).default(''),
+  imageAssetId: Id.nullable().optional(),
+  sprite: SpriteSourceSchema.nullable().optional(),
 });
 
 export const EncounterInput = z.object({

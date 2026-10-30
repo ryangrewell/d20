@@ -54,3 +54,18 @@ export const CalibrationSchema = z.object({
 });
 
 export const HexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/);
+
+/** A piece-by-piece LPC sprite (see shared/sprites/compose). */
+export const SpriteRecipeSchema = z.object({
+  v: z.literal(1),
+  body: z.enum(['male', 'female']),
+  skin: z.string().min(1).max(40),
+  parts: z.array(z.object({ item: z.string().min(1).max(80), colors: z.record(z.string().max(20), z.string().max(40)).optional() })).max(40),
+});
+
+/** How a character's or creature's picture was made, so the builder can reopen it. */
+export const SpriteSourceSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('lpc'), recipe: SpriteRecipeSchema }),
+  z.object({ kind: z.literal('animal'), id: z.string().min(1).max(60) }),
+  z.object({ kind: z.literal('upload') }),
+]);

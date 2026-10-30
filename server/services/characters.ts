@@ -7,11 +7,14 @@ import { ulid } from 'ulid';
 import type { z } from 'zod';
 import { AppError, conflict, forbidden, invalid, notFound } from '@shared/errors';
 import { getAdapter } from '@shared/game-systems/registry';
-import type { CampaignMember, Character, GameSession, InventoryItem } from '@shared/model';
+import type { CampaignMember, Character, GameSession, InventoryItem, Scene, SceneObject } from '@shared/model';
 import type { CreateCharacterInput, ImportCharacterInput, ItemInput, UpdateCharacterInput } from '@shared/schemas/characters';
 import { isConditionalFailure, keys, type TxItem } from '../repo/db';
 import { loadCampaign, requireActiveCampaign, type Actor, type CampaignContext, type Deps } from '../context';
 import { commit } from './commit';
+import { requireImage } from './images';
+import { loadFog } from './sessions';
+import type { Change } from '../realtime/fanout';
 
 const MAX_CHARACTERS_PER_OWNER = 20;
 const MAX_ITEMS = 500;
@@ -61,6 +64,39 @@ async function requireEditable(deps: Deps, actor: Actor, campaignId: string, id:
   if (r.c.ownerSub !== actor.sub && !canEditAny(r.ctx)) throw forbidden('Only the owner or the GM can edit this character.');
   requireActiveCampaign(r.ctx);
   return r;
+}
+
+/** Most tokens a character's picture change updates in one go (keeps the transaction small). */
+const MAX_SYNCED_TOKENS = 60;
+
+/**
+ * Tokens linked to a character show its picture. When the picture changes they're updated,
+ * live for everyone at the table when a session is running.
+ */
+async function syncCharacterTokens(deps: Deps, actor: Actor, campaignId: string, c: Character) {
+  const scenes = await deps.db.queryPrefix<Scene>(`CAMP#${campaignId}`, 'SCENE#', { index: 'GSI1' });
+  const linked: { scene: Scene; obj: SceneObject }[] = [];
+  for (const scene of scenes) {
+    for (const obj of await deps.db.queryPrefix<SceneObject>(`SCENE#${scene.id}`, 'OBJ#')) if (obj.characterId === c.id) linked.push({ scene, obj });
+  }
+  if (!linked.length) return;
+  const now = deps.now().toISOString();
+  const updates = linked.slice(0, MAX_SYNCED_TOKENS).map(({ scene, obj }) => {
+    const { imageAssetId: _old, ...appearance } = obj.appearance;
+    const after: SceneObject = { ...obj, appearance: { ...appearance, ...(c.imageAssetId ? { imageAssetId: c.imageAssetId } : {}) }, revision: obj.revision + 1, updatedAt: now };
+    return { scene, before: obj, after };
+  });
+  const writes: TxItem[] = updates.map(({ before, after }) => ({ Put: { Item: { ...keys.object(after.sceneId, after.id), GSI1PK: `OBJ#${after.id}`, GSI1SK: 'OBJ', entity: 'SceneObject', ...after }, ConditionExpression: 'revision = :rev', ExpressionAttributeValues: { ':rev': before.revision } } }));
+  const campaign = await deps.db.get<{ activeSessionId?: string }>(keys.campaign(campaignId));
+  const session = campaign?.activeSessionId ? await deps.db.get<GameSession>(keys.session(campaign.activeSessionId)) : null;
+  if (!session || session.status === 'ENDED') {
+    await deps.db.transact(writes);
+    return;
+  }
+  const fogs = new Map<string, Awaited<ReturnType<typeof loadFog>>['fog']>();
+  for (const { scene } of updates) if (!fogs.has(scene.id)) fogs.set(scene.id, (await loadFog(deps, scene)).fog);
+  const changes: Change[] = updates.map(({ scene, before, after }) => ({ kind: 'object', before, after, fog: fogs.get(scene.id)! }));
+  await commit(deps, session, actor, changes, writes);
 }
 
 /** Publish an id-only CHARACTER_UPDATED to the owner and GM on the live session, if any. */
@@ -152,15 +188,21 @@ export async function updateCharacter(deps: Deps, actor: Actor, campaignId: stri
     ...(input.conditions ? { conditions: [...new Set(input.conditions)] } : {}),
     ...(input.ownerSub ? { ownerSub: input.ownerSub } : {}),
     ...(input.gmNotes !== undefined ? { gmNotes: input.gmNotes } : {}),
+    ...(input.imageAssetId ? { imageAssetId: input.imageAssetId } : {}),
+    ...(input.sprite ? { sprite: input.sprite } : {}),
     sheet: input.sheet ? validateSheet(c.systemId, input.sheet) : migrated,
     systemVersion: adapter.version,
     revision: c.revision + 1,
     updatedAt: deps.now().toISOString(),
   };
+  if (input.imageAssetId) await requireImage(deps, campaignId, input.imageAssetId);
+  if (input.imageAssetId === null) delete next.imageAssetId;
+  if (input.sprite === null) delete next.sprite;
+  const pictureChanged = input.imageAssetId !== undefined && (input.imageAssetId ?? undefined) !== c.imageAssetId;
   const writes: TxItem[] = [{ Put: { Item: charItem(next), ConditionExpression: 'revision = :rev', ExpressionAttributeValues: { ':rev': c.revision } } }];
   if (actor.sub !== c.ownerSub) {
     // Audit trail for GM edits to a player's sheet.
-    const fields = (['name', 'sheet', 'conditions', 'ownerSub', 'gmNotes'] as const).filter((k) => input[k] !== undefined);
+    const fields = (['name', 'sheet', 'conditions', 'ownerSub', 'gmNotes', 'imageAssetId'] as const).filter((k) => input[k] !== undefined);
     writes.push({ Put: { Item: { ...keys.characterAudit(c.id, ulid()), entity: 'CharacterAudit', characterId: c.id, actorSub: actor.sub, fields, at: next.updatedAt } } });
   }
   try {
@@ -169,6 +211,7 @@ export async function updateCharacter(deps: Deps, actor: Actor, campaignId: stri
     if (isConditionalFailure(err)) throw conflict('This character was changed elsewhere. Reload to see the latest version.');
     throw err;
   }
+  if (pictureChanged) await syncCharacterTokens(deps, actor, campaignId, next);
   await notifyCharacter(deps, actor, campaignId, next);
   if (input.ownerSub && input.ownerSub !== c.ownerSub) await notifyCharacter(deps, actor, campaignId, c);
   return forViewer(next, canReadAny(ctx));

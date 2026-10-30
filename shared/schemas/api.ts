@@ -60,6 +60,10 @@ export const UploadMapIntentInput = z.object({
   bytes: z.number().int().positive(),
 });
 
+/** Character, creature and token pictures (portraits and built sprites). */
+export const ImageUploadIntentInput = z.object({ contentType: z.enum(MAP_CONTENT_TYPES), bytes: z.number().int().positive() });
+export const FinalizeImageInput = z.object({ assetId: Id });
+
 export const MAP_CATEGORIES = ['world', 'region', 'city', 'outdoor', 'building', 'floor', 'dungeon', 'encounter', 'other'] as const;
 
 export const FinalizeMapInput = z.object({

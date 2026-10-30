@@ -3,6 +3,7 @@ import { ulid } from 'ulid';
 import type { z } from 'zod';
 import { notFound } from '@shared/errors';
 import type { CreatureTemplate } from '@shared/model';
+import { requireImage } from './images';
 import type { CreatureInput } from '@shared/schemas/characters';
 import { keys } from '../repo/db';
 import { loadCampaign, requireActiveCampaign, requireGM, type Actor, type Deps } from '../context';
@@ -22,7 +23,9 @@ export async function listCreatures(deps: Deps, actor: Actor, campaignId: string
 export async function createCreature(deps: Deps, actor: Actor, campaignId: string, input: z.output<typeof CreatureInput>) {
   requireActiveCampaign(await gm(deps, actor, campaignId));
   const now = deps.now().toISOString();
-  const t: CreatureTemplate = { id: ulid(), campaignId, ...input, createdAt: now, updatedAt: now };
+  const { imageAssetId, sprite, ...rest } = input;
+  if (imageAssetId) await requireImage(deps, campaignId, imageAssetId);
+  const t: CreatureTemplate = { id: ulid(), campaignId, ...rest, ...(imageAssetId ? { imageAssetId } : {}), ...(sprite ? { sprite } : {}), createdAt: now, updatedAt: now };
   await deps.db.put({ ...keys.creature(campaignId, t.id), entity: 'Creature', ...t });
   return t;
 }
@@ -31,7 +34,14 @@ export async function updateCreature(deps: Deps, actor: Actor, campaignId: strin
   requireActiveCampaign(await gm(deps, actor, campaignId));
   const t = await deps.db.get<CreatureTemplate>(keys.creature(campaignId, id));
   if (!t) throw notFound('Creature');
-  const next: CreatureTemplate = { ...t, ...input, updatedAt: deps.now().toISOString() };
+  const { imageAssetId, sprite, ...rest } = input;
+  if (imageAssetId) await requireImage(deps, campaignId, imageAssetId);
+  const next: CreatureTemplate = { ...t, ...rest, updatedAt: deps.now().toISOString() };
+  // Omitted keeps the picture; null removes it.
+  if (imageAssetId === null) delete next.imageAssetId;
+  else if (imageAssetId) next.imageAssetId = imageAssetId;
+  if (sprite === null) delete next.sprite;
+  else if (sprite) next.sprite = sprite;
   await deps.db.put({ ...keys.creature(campaignId, id), entity: 'Creature', ...next });
   return next;
 }
