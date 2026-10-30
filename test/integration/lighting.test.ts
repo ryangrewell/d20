@@ -255,6 +255,26 @@ d('torchlight and room reveal', () => {
     expect(await aliceSees(ghoul)).toBe(false);
   });
 
+  it('ends with both lights in place when two lit tokens move at the same moment', async () => {
+    await freshScene();
+    await lighting('live', false);
+    const bobPc = (await ok(gm.command(sessionId, 'spawnSceneObject', { sceneId, objectType: 'PC', x: 100, y: 300, label: 'Bob', assignedControllerSub: bob.sub }))).result.objectId;
+    await ok(gm.command(sessionId, 'updateSceneObject', { objectId: pc, patch: { lightRadiusMeters: 5 } }));
+    await ok(gm.command(sessionId, 'updateSceneObject', { objectId: bobPc, patch: { lightRadiusMeters: 5 } }));
+    for (let i = 0; i < 4; i++) {
+      h.published.length = 0;
+      const [a, b] = await Promise.all([alice.command(sessionId, 'moveToken', { objectId: pc, x: 100 + i * 30, y: 100 }), bob.command(sessionId, 'moveToken', { objectId: bobPc, x: 100 + i * 30, y: 330 })]);
+      expect([a.status, b.status]).toEqual([200, 200]);
+      const last = h.published
+        .filter((p) => p.channel.endsWith(`/user/${alice.sub}`))
+        .sort((x, y) => (x.event.revision as number) - (y.event.revision as number))
+        .flatMap((p) => p.event.items)
+        .filter((x) => x.type === 'FOG_LAYERS')
+        .at(-1);
+      expect([...(last?.lights as string[])].sort()).toEqual([...(await snap(alice)).scene.fog.lights].sort());
+    }
+  });
+
   it('lets two lit tokens move at the same moment in remember mode', async () => {
     await freshScene();
     await lighting('remember', false);

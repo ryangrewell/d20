@@ -104,11 +104,18 @@ const handlers: { [K in CommandType]: Handler<K> } = {
     }
     const pos = await clampToMap(ctx, scene, p.x, p.y);
     const after: SceneObject = { ...obj, ...pos, revision: obj.revision + 1, updatedAt: ctx.deps.now().toISOString() };
-    const lit = lightingOn(scene) && isPartyToken(obj) ? await relight(ctx, scene, fog, replaced(await loadSceneObjects(ctx.deps, scene.id), after), { id: obj.id, from: { x: obj.x, y: obj.y }, to: pos }) : unlit(fog);
+    const party = isPartyToken(obj);
+    const objects = party || lightingOn(scene) ? await loadSceneObjects(ctx.deps, scene.id) : [];
+    const lit = lightingOn(scene) && party ? await relight(ctx, scene, fog, replaced(objects, after), { id: obj.id, from: { x: obj.x, y: obj.y }, to: pos }) : unlit(fog);
+    // What this move shows depends on the scene's lighting and the other lights; if either changes
+    // at the same moment, re-run so the last update everyone receives is right.
+    const otherLights = objects.filter((o) => o.id !== obj.id && isPartyToken(o) && o.lightRadiusMeters);
+    const guards = party || lightingOn(scene) ? lightingGuards(scene, lightingOn(scene) ? otherLights : []) : [];
     return {
       changes: [{ kind: 'object', before: obj, after, fog: lit.fog }, ...lit.changes],
       writes: [
         ...lit.writes,
+        ...guards,
         {
           Update: {
             Key: keys.object(scene.id, obj.id),
