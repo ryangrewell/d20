@@ -63,13 +63,35 @@ export async function loadLayers(deps: Deps, scene: Scene, objects?: SceneObject
 
 const visibleParty = (o: SceneObject) => isPartyToken(o) && o.visibility === 'VISIBLE_TO_ALL';
 
-function samplePath(from: Point, to: Point, step: number): Point[] {
-  const d = Math.hypot(to.x - from.x, to.y - from.y);
+/** Fraction of the way along from→to where it first passes through a wall (1 = never). */
+function firstWallHit(from: Point, to: Point, walls: Segment[]): number {
+  let best = 1;
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  for (const w of walls) {
+    const sx = w.b.x - w.a.x;
+    const sy = w.b.y - w.a.y;
+    const den = dx * sy - dy * sx;
+    if (Math.abs(den) < 1e-12) continue;
+    const t = ((w.a.x - from.x) * sy - (w.a.y - from.y) * sx) / den;
+    const u = ((w.a.x - from.x) * dy - (w.a.y - from.y) * dx) / den;
+    if (t > 0 && t < best && u >= 0 && u <= 1) best = t;
+  }
+  return best;
+}
+
+/**
+ * Where a moving light shone: along the move up to the first wall it passes through, then
+ * the end. A token dragged through a wall doesn't light the rooms in between.
+ */
+function samplePath(from: Point, to: Point, step: number, walls: Segment[]): Point[] {
+  const stop = firstWallHit(from, to, walls);
+  const d = Math.hypot(to.x - from.x, to.y - from.y) * stop;
   const n = Math.min(MAX_PATH_SAMPLES, Math.max(1, Math.ceil(d / Math.max(1, step))));
-  return Array.from({ length: n + 1 }, (_, i) => ({
-    x: from.x + ((to.x - from.x) * i) / n,
-    y: from.y + ((to.y - from.y) * i) / n,
-  }));
+  // Stay just short of the wall so the sample is on the near side.
+  const reach = stop < 1 ? Math.max(0, stop - 1e-3) : 1;
+  const pts = Array.from({ length: n + 1 }, (_, i) => ({ x: from.x + (to.x - from.x) * reach * (i / n), y: from.y + (to.y - from.y) * reach * (i / n) }));
+  return stop < 1 ? [...pts, to] : pts;
 }
 
 export type LightingUpdate = {
@@ -104,7 +126,7 @@ export async function lightingUpdate(
   if (scene.lighting?.torch === 'remember' && geo.ppm) {
     for (const o of objectsAfter.filter((x) => visibleParty(x) && (x.lightRadiusMeters ?? 0) > 0)) {
       const r = o.lightRadiusMeters! * geo.ppm;
-      const points = opts.moved?.id === o.id ? samplePath(opts.moved.from, opts.moved.to, r / 2) : [{ x: o.x, y: o.y }];
+      const points = opts.moved?.id === o.id ? samplePath(opts.moved.from, opts.moved.to, r / 2, geo.segments) : [{ x: o.x, y: o.y }];
       const g = ensure();
       if (g) for (const p of points) changed = markPolygon(g, lightPolygon(p, r, geo.segments), stamp) || changed;
     }

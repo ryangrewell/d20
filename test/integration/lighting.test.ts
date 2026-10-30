@@ -202,6 +202,17 @@ d('torchlight and room reveal', () => {
     expect(await aliceSees(ghoul)).toBe(true);
   });
 
+  it('remembers only the part of a move the light could actually see', async () => {
+    await freshScene();
+    await lighting('remember', false);
+    const rat = (await ok(gm.command(sessionId, 'spawnSceneObject', { sceneId, objectType: 'CREATURE', x: 340, y: 100, label: 'Rat', visibility: 'VISIBLE_TO_ALL' }))).result.objectId;
+    await move(pc, 150, 100);
+    await ok(gm.command(sessionId, 'updateSceneObject', { objectId: pc, patch: { lightRadiusMeters: 3 } }));
+    // Dragged straight through the wall into room B: the strip behind the wall stays dark.
+    await move(pc, 500, 100);
+    expect(await aliceSees(rat)).toBe(false);
+  });
+
   it('reveals a whole room when a party token walks in', async () => {
     await freshScene();
     await lighting('off', true);
