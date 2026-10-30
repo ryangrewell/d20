@@ -47,7 +47,9 @@ export class TabletopRenderer {
   private fogCtx = this.fogCanvas.getContext('2d')!;
   private fogScale = 1;
   private fogTexture: Texture | null = null;
-  private tokenViews = new Map<string, { root: Container; disc: Graphics; label: Text; key: string }>();
+  private tokenViews = new Map<string, { root: Container; disc: Graphics; pic: Sprite; picMask: Graphics; picId?: string; label: Text; key: string }>();
+  private imageResolver: ((assetId: string) => Promise<string>) | null = null;
+  private pictures = new Map<string, Promise<Texture | null>>();
   private cursorViews = new Map<string, Container>();
   private ready = false;
   private destroyed = false;
@@ -83,6 +85,30 @@ export class TabletopRenderer {
   }
 
   // ------------------------------------------------------------------ map
+
+  /** How token pictures (asset ids) become loadable links. */
+  setImageResolver(fn: (assetId: string) => Promise<string>) {
+    this.imageResolver = fn;
+  }
+
+  /** A token picture's texture: small pixel sprites stay crisp, photos are smoothed. */
+  private picture(assetId: string): Promise<Texture | null> {
+    if (!this.pictures.has(assetId)) {
+      const load = async () => {
+        if (!this.imageResolver) return null;
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.src = await this.imageResolver(assetId);
+        await img.decode();
+        const tex = Texture.from(img);
+        if (img.naturalWidth <= 128) tex.source.scaleMode = 'nearest';
+        return tex;
+      };
+      // A failed load is retried next time the token redraws.
+      this.pictures.set(assetId, load().catch(() => (this.pictures.delete(assetId), null)));
+    }
+    return this.pictures.get(assetId)!;
+  }
 
   async setMap(map: MapDefinition, imageUrl: string | null): Promise<void> {
     this.map = map;
@@ -246,16 +272,19 @@ export class TabletopRenderer {
       const r = this.tokenRadius(o);
       const hidden = o.visibility !== 'VISIBLE_TO_ALL';
       const hp = 'gmStats' in o ? o.gmStats?.hp : undefined;
-      const key = [r, o.appearance.tint, o.appearance.label, o.objectType, o.visibility, ctx.selectedId === o.id, o.assignedControllerSub === ctx.mySub, o.conditions?.join(','), hp ? `${hp.current}/${hp.max}` : ''].join('|');
+      const key = [r, o.appearance.tint, o.appearance.label, o.appearance.imageAssetId, o.objectType, o.visibility, ctx.selectedId === o.id, o.assignedControllerSub === ctx.mySub, o.conditions?.join(','), hp ? `${hp.current}/${hp.max}` : ''].join('|');
       let view = this.tokenViews.get(o.id);
       if (!view) {
         const root = new Container();
         const disc = new Graphics();
         const label = new Text({ text: '', style: { fontFamily: 'Inter', fontSize: 14, fill: 0xffffff, fontWeight: '600', stroke: { color: 0x000000, width: 4 }, align: 'center' } });
         label.anchor.set(0.5, 0);
-        root.addChild(disc, label);
+        const pic = new Sprite();
+        pic.visible = false;
+        const picMask = new Graphics();
+        root.addChild(disc, pic, picMask, label);
         this.tokens.addChild(root);
-        view = { root, disc, label, key: '' };
+        view = { root, disc, pic, picMask, label, key: '' };
         this.tokenViews.set(o.id, view);
       }
       if (view.key !== key) {
@@ -286,6 +315,7 @@ export class TabletopRenderer {
         const conditions = o.conditions?.length ? `\n${o.conditions.join(' · ')}` : '';
         view.label.text = (o.appearance.label ?? '') + suffix + conditions;
         view.label.position.set(0, r + 3);
+        this.drawPicture(view, o.appearance.imageAssetId, r, hidden);
       }
       view.root.position.set(o.x, o.y);
       view.root.zIndex = o.zIndex;
@@ -320,6 +350,37 @@ export class TabletopRenderer {
         const r = this.tokenRadius(o) * 1.1;
         return (p.x - o.x) ** 2 + (p.y - o.y) ** 2 <= r * r;
       });
+  }
+
+  /** Puts a token's picture over its disc once loaded: sprites stand on it, photos fill a circle. */
+  private drawPicture(view: { pic: Sprite; picMask: Graphics; picId?: string }, assetId: string | undefined, r: number, hidden: boolean) {
+    view.picId = assetId;
+    if (!assetId) {
+      view.pic.visible = false;
+      view.pic.mask = null;
+      view.picMask.clear();
+      return;
+    }
+    void this.picture(assetId).then((tex) => {
+      if (!tex || view.picId !== assetId || this.destroyed) return;
+      const pixelArt = tex.source.scaleMode === 'nearest';
+      view.pic.texture = tex;
+      view.pic.alpha = hidden ? 0.6 : 1;
+      if (pixelArt) {
+        // LPC frames have empty margins; the figure stands a little below centre.
+        const size = r * 2.7;
+        view.pic.anchor.set(0.5, 0.58);
+        view.pic.setSize(size, size);
+        view.pic.mask = null;
+        view.picMask.clear();
+      } else {
+        view.pic.anchor.set(0.5);
+        view.pic.setSize(r * 1.84, r * 1.84);
+        view.picMask.clear().circle(0, 0, r * 0.92).fill({ color: 0xffffff });
+        view.pic.mask = view.picMask;
+      }
+      view.pic.visible = true;
+    });
   }
 
   moveTokenView(id: string, x: number, y: number) {

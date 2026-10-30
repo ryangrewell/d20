@@ -4,6 +4,8 @@ import { QuickEncounterDialog } from '@/features/campaigns/QuickEncounterDialog'
 import { toast } from 'sonner';
 import type { SceneObject } from '@shared/model';
 import { isPartyToken } from '@shared/lighting/light';
+import { Picture } from '@/features/sprites/Picture';
+import { SpriteBuilder } from '@/features/sprites/SpriteBuilder';
 import { fromMeters, toMeters } from '@shared/units';
 import { Link } from 'react-router-dom';
 import { Button, Field, Input, Select, cn } from '@/components/ui/primitives';
@@ -176,6 +178,26 @@ export function GMPanel({ engine }: { engine: SyncEngine }) {
   );
 }
 
+/** The token's picture: copied from its character or creature, or set here by the GM. */
+function TokenPicture({ obj, update }: { obj: SceneObject; update: (patch: Record<string, unknown>) => void }) {
+  const campaignId = useTable((s) => s.snapshot?.campaign.id ?? '');
+  const [picking, setPicking] = useState(false);
+  return (
+    <div className="flex items-center gap-2">
+      <Picture campaignId={campaignId} assetId={obj.appearance.imageAssetId} className="h-12 w-12" alt="" />
+      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPicking(true)}>
+        {obj.appearance.imageAssetId ? 'Change picture' : 'Add picture'}
+      </Button>
+      {obj.appearance.imageAssetId && (
+        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => update({ imageAssetId: null })}>
+          Remove
+        </Button>
+      )}
+      {picking && <SpriteBuilder campaignId={campaignId} title="Token picture" onClose={() => setPicking(false)} onSaved={(imageAssetId) => update({ imageAssetId })} />}
+    </div>
+  );
+}
+
 const TORCH_LABEL = { off: 'Off', remember: 'Remember explored', live: 'Live only' } as const;
 
 /** Per-scene fog automation: torchlight mode and revealing rooms as party tokens walk in. */
@@ -303,6 +325,7 @@ function Inspector({ obj, engine, players }: { obj: SceneObject; engine: SyncEng
           <Trash2 className="h-4 w-4" aria-hidden />
         </Button>
       </div>
+      <TokenPicture obj={obj} update={update} />
       {isPartyToken(obj) && <LightRadius obj={obj} update={update} />}
       <Conditions value={obj.conditions ?? []} options={getAdapter(useTable.getState().snapshot?.campaign.systemId ?? 'generic-d20').conditionDefinitions} editable onChange={(conditions) => void update({ conditions })} />
       {(obj.gmStats?.hp || obj.objectType === 'CREATURE' || obj.objectType === 'NPC') && <HitPoints obj={obj} update={update} />}

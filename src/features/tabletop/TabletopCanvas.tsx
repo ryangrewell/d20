@@ -5,6 +5,7 @@ import { gridSpacingPixels, snapToGrid } from '@shared/geometry/grid';
 import { formatDistance } from '@shared/units';
 import type { FogOp } from '@shared/fog';
 import { TabletopRenderer } from './renderer/TabletopRenderer';
+import { getImageUrl } from '@/lib/api/images';
 import { getTable, setTable, useTable, type TableObject } from './store';
 import type { SyncEngine } from './sync';
 
@@ -35,6 +36,7 @@ export function TabletopCanvas({ engine, onCamera, cameraRef }: { engine: SyncEn
   useEffect(() => {
     const r = new TabletopRenderer();
     rendererRef.current = r;
+    r.setImageResolver((assetId) => getImageUrl(getTable().snapshot?.campaign.id ?? '', assetId));
     let alive = true;
     void r.init(hostRef.current!).then(() => alive && setReady(true));
     return () => {

@@ -68,6 +68,12 @@ export function HomePage() {
         <Link to="/legal" className="hover:text-muted">
           Terms, privacy &amp; credits
         </Link>
+        <span className="mx-2" aria-hidden>
+          ·
+        </span>
+        <Link to="/credits" className="hover:text-muted">
+          Art credits
+        </Link>
       </footer>
     </div>
   );

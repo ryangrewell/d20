@@ -4,7 +4,9 @@ import { Pencil, Plus, Skull, Trash2, Zap } from 'lucide-react';
 import { QuickEncounterDialog } from './QuickEncounterDialog';
 import { toast } from 'sonner';
 import type { CampaignDashboardDto } from '@shared/dto';
-import type { CreatureTemplate, EncounterTemplate } from '@shared/model';
+import type { CreatureTemplate, EncounterTemplate, SpriteSource } from '@shared/model';
+import { Picture } from '@/features/sprites/Picture';
+import { SpriteBuilder } from '@/features/sprites/SpriteBuilder';
 import { creatureApi, encounterApi, qk, useCreatures, useEncounters } from '@/lib/api/hooks';
 import { Button, Card, EmptyState, ErrorNotice, Field, Input, Spinner, Textarea } from '@/components/ui/primitives';
 import { Dialog } from '@/components/ui/dialog';
@@ -34,7 +36,7 @@ export function CreaturesTab({ data }: { data: CampaignDashboardDto }) {
           <Card key={t.id} className="p-4">
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className="h-3 w-3 rounded-full" style={{ background: t.tint }} aria-hidden />
+                {t.imageAssetId ? <Picture campaignId={cid} assetId={t.imageAssetId} className="h-10 w-10" alt="" /> : <span className="h-3 w-3 rounded-full" style={{ background: t.tint }} aria-hidden />}
                 <h3 className="font-semibold">{t.name}</h3>
               </div>
               <div className="flex">
@@ -80,6 +82,8 @@ function CreatureDialog({ campaignId, template, onClose }: { campaignId: string;
     notes: template?.notes ?? '',
   });
   const [busy, setBusy] = useState(false);
+  const [picture, setPicture] = useState<{ imageAssetId?: string; sprite?: SpriteSource }>({ ...(template?.imageAssetId ? { imageAssetId: template.imageAssetId } : {}), ...(template?.sprite ? { sprite: template.sprite } : {}) });
+  const [picking, setPicking] = useState(false);
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const save = async () => {
     setBusy(true);
@@ -91,6 +95,7 @@ function CreatureDialog({ campaignId, template, onClose }: { campaignId: string;
       notes: form.notes,
       ...(form.ac !== '' ? { ac: Math.round(Number(form.ac)) } : {}),
       ...(form.sizeFt !== '' && Number(form.sizeFt) > 0 ? { sizeMeters: Number(form.sizeFt) * 0.3048 } : {}),
+      ...(picture.imageAssetId ? { imageAssetId: picture.imageAssetId, ...(picture.sprite ? { sprite: picture.sprite } : {}) } : template?.imageAssetId ? { imageAssetId: null, sprite: null } : {}),
     };
     try {
       if (template) await creatureApi.update(campaignId, template.id, input);
@@ -111,6 +116,18 @@ function CreatureDialog({ campaignId, template, onClose }: { campaignId: string;
           void save();
         }}
       >
+        <div className="flex items-center gap-3 sm:col-span-2">
+          <Picture campaignId={campaignId} assetId={picture.imageAssetId} className="h-16 w-16" alt="" />
+          <Button type="button" size="sm" variant="outline" onClick={() => setPicking(true)}>
+            {picture.imageAssetId ? 'Change picture' : 'Add picture'}
+          </Button>
+          {picture.imageAssetId && (
+            <Button type="button" size="sm" variant="ghost" onClick={() => setPicture({})}>
+              Remove
+            </Button>
+          )}
+          {picking && <SpriteBuilder campaignId={campaignId} initial={picture.sprite} title="Creature picture" onClose={() => setPicking(false)} onSaved={(imageAssetId, sprite) => setPicture({ imageAssetId, sprite })} />}
+        </div>
         <Field label="Name" htmlFor="crName">
           <Input id="crName" autoFocus value={form.name} maxLength={60} onChange={set('name')} />
         </Field>

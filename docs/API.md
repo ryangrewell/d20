@@ -25,10 +25,13 @@ All routes are under `/api`. They need `Authorization: Bearer <Cognito ID token>
 | POST/PATCH | `/campaigns/:cid/scenes[/:scid]` | GM |
 | GET/POST | `/campaigns/:cid/characters` | List (own sheets in full, others by name only; GM sees all) / create (GM may set `ownerSub`) |
 | POST | `/campaigns/:cid/characters/import` | `{ data: <d20.character v1 export>, ownerSub? }` |
-| GET/PATCH/DELETE | `/campaigns/:cid/characters/:chid` | Owner or GM. PATCH needs `expectedRevision`; `gmNotes`/`ownerSub` GM-only; GM edits are audited |
+| GET/PATCH/DELETE | `/campaigns/:cid/characters/:chid` | Owner or GM. PATCH needs `expectedRevision`; `gmNotes`/`ownerSub` GM-only; GM edits are audited. `imageAssetId` (a finished picture, or null) and `sprite` (`{ kind: 'lpc', recipe } \| { kind: 'animal', id } \| { kind: 'upload' }`) set the picture; linked tokens update live |
 | GET | `/campaigns/:cid/characters/:chid/export` | Platform JSON (`format: d20.character`, `version: 1`) without GM notes |
 | POST/PATCH/DELETE | `/campaigns/:cid/characters/:chid/items[/:iid]` | Inventory; owner or GM; `gmNote` GM-only |
-| GET/POST/PATCH/DELETE | `/campaigns/:cid/creatures[/:crid]` | GM-only creature library |
+| GET/POST/PATCH/DELETE | `/campaigns/:cid/creatures[/:crid]` | GM-only creature library; optional `imageAssetId`/`sprite` (null removes), copied onto tokens placed from it |
+| POST | `/campaigns/:cid/images/upload-intent` | Any member. `{ contentType, bytes ≤ 2 MB }` → presigned PUT |
+| POST | `/campaigns/:cid/images` | The uploader. `{ assetId }`: checks the real type and size (≤ 1024 × 1024) and marks it ready |
+| GET | `/campaigns/:cid/images/:aid` | Any member. `{ url, expiresAt }`, a one-hour link to a finished picture |
 | GET/POST/PATCH/DELETE | `/campaigns/:cid/encounters[/:eid]` | GM-only encounter templates (`groups: [{ creatureId, count }]`, ≤30 creatures) |
 | POST | `/campaigns/:cid/quick-encounters` | GM-only. Saves new creatures and an encounter in one transaction. Each group is `{ count, creatureId }` (reuse) or `{ count, creature }` (new); ≤20 enemies, ≤4 groups. Stats come from the client, scaled from `settings.enemyBaseline` |
 | GET/POST/PATCH/DELETE | `/campaigns/:cid/journal[/:jid]` | List returns only readable entries; writes GM-only. `visibility: GM_ONLY\|ALL\|SELECTED_PLAYERS` |
@@ -55,7 +58,7 @@ All routes are under `/api`. They need `Authorization: Bearer <Cognito ID token>
 |---|---|---|
 | `moveToken` | GM, or the token's controller | `objectId, x, y, expectedObjectRevision?` |
 | `spawnSceneObject` | GM | `sceneId, objectType, x, y, label?, tint?, sizeMeters?, visibility, allowedViewerIds?, assignedControllerSub?, gmNotes?, templateId?, characterId?, loot?, portal?` |
-| `updateSceneObject` | GM | `objectId, patch{ label, tint, …, conditions, loot, gmStats, characterId, portal, lightRadiusMeters }`. `lightRadiusMeters` only on party tokens (PC or player-controlled) on a calibrated map |
+| `updateSceneObject` | GM | `objectId, patch{ label, tint, …, conditions, loot, gmStats, characterId, portal, lightRadiusMeters, imageAssetId }`. `lightRadiusMeters` only on party tokens (PC or player-controlled) on a calibrated map |
 | `removeSceneObject` | GM | `objectId` |
 | `transferSceneObject` | GM | `objectId, targetSceneId, x?, y?` (defaults to the target map's centre; keeps id, controller, appearance) |
 | `updateFog` | GM | `sceneId, op{ mode, shape: rect\|polygon\|brush }` |

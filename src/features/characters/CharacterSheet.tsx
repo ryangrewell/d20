@@ -8,7 +8,9 @@ import { Dices, Download, Minus, Plus, Save, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { getAdapter } from '@shared/game-systems/registry';
 import type { FieldDef, ListItemField } from '@shared/game-systems/core';
-import type { InventoryItem, ItemState } from '@shared/model';
+import type { InventoryItem, ItemState, SpriteSource } from '@shared/model';
+import { Picture } from '@/features/sprites/Picture';
+import { SpriteBuilder } from '@/features/sprites/SpriteBuilder';
 import { ApiError } from '@/lib/api/client';
 import { characterApi, qk, useCharacter, type CharacterDetail } from '@/lib/api/hooks';
 import { Badge, Button, ErrorNotice, Input, Select, Spinner, Textarea, cn } from '@/components/ui/primitives';
@@ -47,7 +49,15 @@ function SheetEditor({ campaignId, detail, compact, isGM, members, onRoll }: { c
   const [draft, setDraft] = useState<Draft>(fromServer);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [picking, setPicking] = useState(false);
   const editable = detail.canEdit;
+
+  const setPicture = async (imageAssetId: string, sprite: SpriteSource) => {
+    await characterApi.update(campaignId, c.id, { expectedRevision: c.revision, imageAssetId, sprite });
+    await qc.invalidateQueries({ queryKey: qk.character(campaignId, c.id) });
+    void qc.invalidateQueries({ queryKey: qk.characters(campaignId) });
+    toast.success('Picture updated');
+  };
 
   // Adopt server changes (e.g. the GM edited, or loot arrived) unless the user is mid-edit.
   useEffect(() => {
@@ -92,6 +102,17 @@ function SheetEditor({ campaignId, detail, compact, isGM, members, onRoll }: { c
   return (
     <div className={cn('space-y-5', compact && 'text-sm')}>
       <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className="shrink-0 rounded-lg focus-visible:outline-2 disabled:cursor-default"
+          aria-label={editable ? 'Change picture' : 'Character picture'}
+          title={editable ? 'Change picture' : undefined}
+          disabled={!editable}
+          onClick={() => setPicking(true)}
+        >
+          <Picture campaignId={campaignId} assetId={c.imageAssetId} className={compact ? 'h-12 w-12' : 'h-20 w-20'} alt={c.name} />
+        </button>
+        {picking && <SpriteBuilder campaignId={campaignId} initial={c.sprite} title={`Picture for ${c.name}`} onClose={() => setPicking(false)} onSaved={setPicture} />}
         <Input aria-label="Character name" value={draft.name} disabled={!editable} onChange={(e) => set({ name: e.target.value })} className={cn('min-w-0 flex-1 font-display font-semibold', compact ? 'h-9' : 'h-11 text-lg')} />
         {editable && (
           <Button size="sm" onClick={() => void save()} disabled={!dirty} loading={saving}>

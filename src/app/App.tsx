@@ -14,6 +14,7 @@ import { InvitePage } from '@/features/invites/InvitePage';
 import { CampaignPage } from '@/features/campaigns/CampaignPage';
 import { AccountPage } from '@/features/auth/AccountPage';
 import { LegalPage } from '@/features/home/LegalPage';
+import { CreditsPage } from '@/features/home/CreditsPage';
 
 // The tabletop and map tooling pull in PixiJS; load them on demand.
 const TabletopPage = lazy(() => import('@/features/tabletop/TabletopPage'));
@@ -43,6 +44,7 @@ export function App() {
               <Route path="/verify" element={<VerifyPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/legal" element={<LegalPage />} />
+              <Route path="/credits" element={<CreditsPage />} />
               <Route path="/invite/:token" element={<RequireAuth><InvitePage /></RequireAuth>} />
               <Route path="/campaigns/:campaignId/sessions/:sessionId" element={<RequireAuth><TabletopPage /></RequireAuth>} />
               <Route path="/campaigns/:campaignId/sessions/:sessionId/display" element={<RequireAuth><TabletopPage display /></RequireAuth>} />

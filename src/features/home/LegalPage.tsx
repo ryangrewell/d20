@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { Logo } from '@/components/layout/AppLayout';
 
 export function LegalPage() {
@@ -30,7 +31,14 @@ export function LegalPage() {
           </section>
           <section>
             <h2 className="mb-2 text-base font-semibold text-text">Credits</h2>
-            <p>d20 currently ships a generic, system-agnostic rules layer and does not include third-party rulebook content. Icons by Lucide (ISC license).</p>
+            <p>
+              d20 currently ships a generic, system-agnostic rules layer and does not include third-party rulebook content. Icons by Lucide (ISC license). Sprite builder
+              art is by the Liberated Pixel Cup and OpenGameArt artists listed on the{' '}
+              <Link to="/credits" className="text-accent underline">
+                art credits
+              </Link>{' '}
+              page.
+            </p>
           </section>
         </div>
       </div>
