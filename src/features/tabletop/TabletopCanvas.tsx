@@ -21,6 +21,9 @@ export function TabletopCanvas({ engine, onCamera, cameraRef }: { engine: SyncEn
   const [ready, setReady] = useState(false);
   const dragRef = useRef<Drag | null>(null);
   const spaceRef = useRef(false);
+  // Clicking (not dragging) on overlapping tokens opens a small list to choose from.
+  const stackRef = useRef<{ ids: string[]; client: Point } | null>(null);
+  const [picker, setPicker] = useState<{ ids: string[]; x: number; y: number } | null>(null);
 
   const snap = useTable((s) => s.snapshot);
   const sceneId = snap?.scene?.scene.id;
@@ -149,14 +152,21 @@ export function TabletopCanvas({ engine, onCamera, cameraRef }: { engine: SyncEn
     hostRef.current!.setPointerCapture(e.pointerId);
     const p = toMap(e);
     const s = getTable();
+    setPicker(null);
+    stackRef.current = null;
     if (e.button === 1 || e.button === 2 || spaceRef.current || s.tool === 'pan') {
       dragRef.current = { kind: 'pan', last: { x: e.clientX, y: e.clientY } };
       return;
     }
     switch (s.tool) {
       case 'select': {
-        const hit = r.hitTest(p, Object.values(s.objects));
+        const hits = r.hitTestAll(p, Object.values(s.objects));
+        // In a stack, drag what you'd expect: the selected token if you can move it, else your own
+        // movable token, rather than whatever happens to be on top (a loot pile, say).
+        const current = hits.find((o) => o.id === s.selectedId);
+        const hit = (current && canMove(current) ? current : undefined) ?? hits.find(canMove) ?? current ?? hits[0];
         setTable({ selectedId: hit?.id ?? null });
+        if (hits.length > 1) stackRef.current = { ids: hits.map((o) => o.id), client: { x: e.clientX, y: e.clientY } };
         if (hit && canMove(hit)) dragRef.current = { kind: 'token', id: hit.id, offset: { x: hit.x - p.x, y: hit.y - p.y }, start: { x: hit.x, y: hit.y }, moved: false };
         else dragRef.current = { kind: 'pan', last: { x: e.clientX, y: e.clientY } };
         return;
@@ -244,6 +254,12 @@ export function TabletopCanvas({ engine, onCamera, cameraRef }: { engine: SyncEn
     const r = rendererRef.current;
     const d = dragRef.current;
     dragRef.current = null;
+    const stack = stackRef.current;
+    stackRef.current = null;
+    if (stack && distance(stack.client, { x: e.clientX, y: e.clientY }) < 5) {
+      const rect = hostRef.current!.getBoundingClientRect();
+      setPicker({ ids: stack.ids, x: e.clientX - rect.left, y: e.clientY - rect.top });
+    }
     if (!r || !d) return;
     if (d.kind === 'token') {
       if (!d.moved) return r.refresh();
@@ -285,6 +301,7 @@ export function TabletopCanvas({ engine, onCamera, cameraRef }: { engine: SyncEn
       if (!r) return;
       const rect = el.getBoundingClientRect();
       const anchor = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      setPicker(null);
       if (e.ctrlKey || Math.abs(e.deltaY) >= Math.abs(e.deltaX)) applyCamera(zoomAt(r.getCamera(), anchor, Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015))));
       else applyCamera(panBy(r.getCamera(), -e.deltaX, -e.deltaY));
     };
@@ -296,6 +313,7 @@ export function TabletopCanvas({ engine, onCamera, cameraRef }: { engine: SyncEn
   // Keyboard: space-drag pans; Delete removes selection (GM).
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPicker(null);
       if (e.code === 'Space' && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) spaceRef.current = true;
     };
     const up = (e: KeyboardEvent) => {
@@ -313,16 +331,56 @@ export function TabletopCanvas({ engine, onCamera, cameraRef }: { engine: SyncEn
   const cursorClass = tool === 'pan' ? 'cursor-grab' : tool === 'select' ? 'cursor-default' : 'cursor-crosshair';
 
   return (
-    <div
-      ref={hostRef}
-      className={`absolute inset-0 touch-none select-none ${cursorClass}`}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerLeave={() => engine.leaveCursor()}
-      onContextMenu={(e) => e.preventDefault()}
-      role="application"
-      aria-label="Tabletop map. Use the toolbar to choose a tool; scroll to zoom, right-drag or space-drag to pan."
-    />
+    <>
+      <div
+        ref={hostRef}
+        className={`absolute inset-0 touch-none select-none ${cursorClass}`}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerLeave={() => engine.leaveCursor()}
+        onContextMenu={(e) => e.preventDefault()}
+        role="application"
+        aria-label="Tabletop map. Use the toolbar to choose a tool; scroll to zoom, right-drag or space-drag to pan."
+      />
+      {picker && <StackPicker picker={picker} host={hostRef.current} onClose={() => setPicker(null)} />}
+    </>
+  );
+}
+
+const TYPE_LABEL: Record<TableObject['objectType'], string> = { PC: 'Character', NPC: 'NPC', CREATURE: 'Creature', LOOT: 'Loot', PROP: 'Prop', PIN: 'Pin' };
+
+/** Lists the tokens under a click so the one underneath can be chosen. */
+function StackPicker({ picker, host, onClose }: { picker: { ids: string[]; x: number; y: number }; host: HTMLDivElement | null; onClose: () => void }) {
+  const objects = useTable((s) => s.objects);
+  const selectedId = useTable((s) => s.selectedId);
+  const items = picker.ids.map((id) => objects[id]).filter((o): o is TableObject => !!o);
+  if (items.length < 2) return null;
+  // Keep the list inside the map area.
+  const w = 220;
+  const left = Math.min(Math.max(8, picker.x + 12), (host?.clientWidth ?? 1e4) - w - 8);
+  const top = Math.min(Math.max(8, picker.y + 12), (host?.clientHeight ?? 1e4) - (items.length * 40 + 40));
+  return (
+    <div role="menu" aria-label="Tokens here" className="absolute z-20 rounded-lg border border-border bg-surface/95 p-1 shadow-xl backdrop-blur" style={{ left, top, width: w }}>
+      <p className="px-2 pb-1 pt-0.5 text-[11px] text-faint">{items.length} tokens here. Pick one:</p>
+      {items.map((o) => (
+        <button
+          key={o.id}
+          role="menuitem"
+          className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-surface-2 ${o.id === selectedId ? 'bg-accent/15 text-accent' : ''}`}
+          onClick={() => {
+            setTable({ selectedId: o.id });
+            onClose();
+          }}
+        >
+          <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: o.appearance.tint }} aria-hidden />
+          <span className="min-w-0 flex-1 truncate">{o.appearance.label || TYPE_LABEL[o.objectType]}</span>
+          <span className="shrink-0 text-[11px] text-faint">
+            {TYPE_LABEL[o.objectType]}
+            {o.visibility !== 'VISIBLE_TO_ALL' ? ' · hidden' : ''}
+          </span>
+        </button>
+      ))}
+    </div>
   );
 }

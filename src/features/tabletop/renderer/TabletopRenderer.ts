@@ -269,12 +269,17 @@ export class TabletopRenderer {
 
   /** Hit test in map coordinates, topmost first. */
   hitTest(p: Point, objects: TableObject[]): TableObject | null {
-    const sorted = [...objects].sort((a, b) => b.zIndex - a.zIndex);
-    for (const o of sorted) {
-      const r = this.tokenRadius(o) * 1.1;
-      if ((p.x - o.x) ** 2 + (p.y - o.y) ** 2 <= r * r) return o;
-    }
-    return null;
+    return this.hitTestAll(p, objects)[0] ?? null;
+  }
+
+  /** Every token under the point, topmost first (for picking out of a stack). */
+  hitTestAll(p: Point, objects: TableObject[]): TableObject[] {
+    return [...objects]
+      .sort((a, b) => b.zIndex - a.zIndex)
+      .filter((o) => {
+        const r = this.tokenRadius(o) * 1.1;
+        return (p.x - o.x) ** 2 + (p.y - o.y) ** 2 <= r * r;
+      });
   }
 
   moveTokenView(id: string, x: number, y: number) {

@@ -195,3 +195,51 @@ test('GM prepares another scene privately, then moves the players there', async 
   await expect.poll(async () => (await table(p))?.objects[rat]?.x).toBe(250);
   await expect(g.getByText('Only you can see')).toBeHidden();
 });
+
+test('a player standing on loot can still grab their token, and can pick the loot from a list', async ({ browser }) => {
+  const api = await request.newContext({ baseURL: 'http://localhost:8787' });
+  const id = Date.now().toString(36);
+  const gm = await account(api, `gm-s-${id}@e2e.local`, 'GM');
+  const pl = await account(api, `pl-s-${id}@e2e.local`, `Ash ${id}`);
+  const campaign = await gm.call('POST', '/campaigns', { title: `Stack ${id}` });
+  const inv = await gm.call('POST', `/campaigns/${campaign.id}/invites`, {});
+  await pl.call('POST', '/invites/accept', { token: inv.token });
+  const img = png(600, 400);
+  const intent = await gm.call('POST', `/campaigns/${campaign.id}/maps/upload-intent`, { fileName: 'm.png', contentType: 'image/png', bytes: img.length });
+  await fetch(intent.uploadUrl, { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: new Blob([new Uint8Array(img)]) });
+  const map = await gm.call('POST', `/campaigns/${campaign.id}/maps`, { assetId: intent.assetId, name: 'Room' });
+  const scene = await gm.call('POST', `/campaigns/${campaign.id}/scenes`, { mapId: map.id, name: 'Room', fogInitial: 'revealed' });
+  const session = await gm.call('POST', `/campaigns/${campaign.id}/sessions`, {});
+  await gm.cmd(session.id, 'switchActiveScene', { sceneId: scene.id });
+  await gm.call('POST', `/sessions/${session.id}/transition`, { action: 'start' });
+  const me = (await gm.cmd(session.id, 'spawnSceneObject', { sceneId: scene.id, objectType: 'PC', x: 300, y: 200, label: 'Ash', assignedControllerSub: pl.sub })).result.objectId as string;
+  // The chest is placed after (so drawn on top of) the player's token, at the same spot.
+  await gm.cmd(session.id, 'spawnSceneObject', { sceneId: scene.id, objectType: 'LOOT', x: 300, y: 200, label: 'Chest', visibility: 'VISIBLE_TO_ALL', loot: [{ id: 'c', name: 'Copper key', quantity: 1 }] });
+
+  const p = await (await browser.newContext()).newPage();
+  await signedInPage(p, pl.token, `/campaigns/${campaign.id}/sessions/${session.id}`);
+  await expect(p.getByText('Connected')).toBeVisible();
+  await expect.poll(async () => Object.keys((await table(p))?.objects ?? {}).length).toBe(2);
+  // Wait for the map to finish fitting the screen so the click lands on the tokens.
+  const clientOf = () => p.evaluate((pt) => JSON.stringify((window as any).__d20.mapToClient(pt)), { x: 300, y: 200 });
+  let prev = '';
+  await expect.poll(async () => { const now = await clientOf(); const settled = now === prev; prev = now; return settled; }, { intervals: [300] }).toBe(true);
+  const at = JSON.parse(prev);
+
+  // A plain click on the pile opens the picker; choosing the chest opens its loot card.
+  await p.mouse.click(at.x, at.y);
+  const menu = p.getByRole('menu', { name: 'Tokens here' });
+  await expect(menu.getByRole('menuitem')).toHaveCount(2);
+  await menu.getByRole('menuitem', { name: /Chest/ }).click();
+  await expect(menu).toBeHidden();
+  await expect(p.getByRole('dialog', { name: 'Loot' }).getByRole('heading', { name: 'Chest' })).toBeVisible();
+
+  // Dragging from the pile moves the player's own token, not the chest on top of it.
+  const to = await p.evaluate((pt) => (window as any).__d20.mapToClient(pt), { x: 450, y: 250 });
+  await p.mouse.move(at.x, at.y);
+  await p.mouse.down();
+  await p.mouse.move(to.x, to.y, { steps: 8 });
+  await p.mouse.up();
+  await expect.poll(async () => Math.round((await table(p))?.objects[me]?.x ?? 0)).toBeGreaterThan(400);
+  await expect(menu).toBeHidden();
+});
