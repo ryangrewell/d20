@@ -186,6 +186,22 @@ d('torchlight and room reveal', () => {
     expect((await snap(alice)).scene.fog.explored).toEqual(expect.any(String));
   });
 
+  it('lets torchlight clear fog the GM painted back over an explored area', async () => {
+    await freshScene();
+    await lighting('remember', false);
+    await ok(gm.command(sessionId, 'updateSceneObject', { objectId: pc, patch: { lightRadiusMeters: 10 } }));
+    await move(pc, 420, 110);
+    await move(pc, 150, 200);
+    expect(await aliceSees(ghoul)).toBe(true);
+    // The GM paints fog back over room B: the ghoul disappears for players.
+    await ok(gm.command(sessionId, 'updateFog', { sceneId, op: { mode: 'conceal', shape: { kind: 'rect', x: 300, y: 0, w: 300, h: 400 } } }));
+    expect(await aliceSees(ghoul)).toBe(false);
+    // Carrying the torch back through clears the fresh fog again, and it stays cleared.
+    await move(pc, 420, 110);
+    await move(pc, 150, 200);
+    expect(await aliceSees(ghoul)).toBe(true);
+  });
+
   it('reveals a whole room when a party token walks in', async () => {
     await freshScene();
     await lighting('off', true);

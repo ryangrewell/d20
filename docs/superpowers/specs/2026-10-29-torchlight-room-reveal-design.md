@@ -66,7 +66,7 @@ Both should take work off the GM. The GM can switch either one on or off during 
 - **Who triggers room reveal:** only tokens of type PC, or tokens controlled by a player. NPCs, creatures and loot never trigger it.
 - **Room reveal stays revealed** in both torchlight modes.
 - **Automatic reveals are a separate layer.** Explored areas and revealed rooms are stored on the scene in an "explored" layer, kept apart from the GM's hand-painted fog operations.
-  - **Order of evaluation:** start from the initial state, then the explored layer reveals, then the GM's own fog operations, where last wins. A GM conceal therefore hides an explored area until the GM reveals it again.
+  - **Order of evaluation:** current light first. Otherwise, whichever came last of exploring and the GM's own fog operations wins, then the initial state. Each explored cell remembers when it was explored. So fog the GM paints over an explored area hides it again, and a torch or a character walking back in clears it again. *(User's decision on 2026-10-29, after trying it.)*
   - **Light on top:** current light from visible party tokens shows through everything, in both modes.
   - **Undo still works:** the GM's fog Undo only looks at GM fog operations, so automatic reveals during play don't make it fail.
   - **Reset fog** clears the explored layer too.

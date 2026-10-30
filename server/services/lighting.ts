@@ -93,6 +93,8 @@ export async function lightingUpdate(
   const record = await loadExploredRecord(deps, scene.id);
   let grid: ExploredGrid | null = opts.clearExplored ? null : record.grid;
   let changed = false;
+  // Exploring now comes after every GM fog op painted so far, so it clears fog painted before it.
+  const stamp = fogBefore.ops.length + 1;
   const ensure = () => (grid ??= geo.map ? createExplored(geo.map.widthPx, geo.map.heightPx) : null);
 
   if (scene.lighting?.torch === 'remember' && geo.ppm) {
@@ -100,14 +102,14 @@ export async function lightingUpdate(
       const r = o.lightRadiusMeters! * geo.ppm;
       const points = opts.moved?.id === o.id ? samplePath(opts.moved.from, opts.moved.to, r / 2) : [{ x: o.x, y: o.y }];
       const g = ensure();
-      if (g) for (const p of points) changed = markPolygon(g, lightPolygon(p, r, geo.segments)) || changed;
+      if (g) for (const p of points) changed = markPolygon(g, lightPolygon(p, r, geo.segments), stamp) || changed;
     }
   }
   if (scene.lighting?.roomReveal && geo.walls) {
     for (const o of objectsAfter.filter(visibleParty)) {
       for (const room of roomsContaining(geo.walls, { x: o.x, y: o.y })) {
         const g = ensure();
-        if (g) changed = markPolygon(g, room.points) || changed;
+        if (g) changed = markPolygon(g, room.points, stamp) || changed;
       }
     }
   }

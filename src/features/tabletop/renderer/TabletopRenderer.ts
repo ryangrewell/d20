@@ -159,14 +159,24 @@ export class TabletopRenderer {
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, this.fogCanvas.width, this.fogCanvas.height);
     }
-    if (fog.explored) {
+    // Explored area and GM ops interleave by time: cells stamped n were explored after op n-1.
+    const runs = new Map<number, [number, number, number][]>();
+    if (fog.explored) forEachExploredRun(fog.explored, (r, c0, c1, stamp) => (runs.get(stamp) ?? runs.set(stamp, []).get(stamp)!).push([r, c0, c1]));
+    const reveal = (stamp: number) => {
       const g = fog.explored;
+      const rs = runs.get(stamp);
+      if (!g || !rs) return;
       ctx.globalCompositeOperation = 'destination-out';
       ctx.fillStyle = '#000';
       // Slight overlap hides seams between cells when scaled.
-      forEachExploredRun(g, (r, c0, c1) => ctx.fillRect(c0 * g.cellPx * k, r * g.cellPx * k, (c1 - c0 + 1) * g.cellPx * k + 0.5, g.cellPx * k + 0.5));
-    }
-    for (const op of fog.ops) this.drawFogOp(op);
+      for (const [r, c0, c1] of rs) ctx.fillRect(c0 * g.cellPx * k, r * g.cellPx * k, (c1 - c0 + 1) * g.cellPx * k + 0.5, g.cellPx * k + 0.5);
+    };
+    reveal(1);
+    fog.ops.forEach((op, i) => {
+      this.drawFogOp(op);
+      reveal(i + 2);
+    });
+    for (const stamp of runs.keys()) if (stamp > fog.ops.length + 1) reveal(stamp);
     for (const shape of fog.lights ?? []) this.drawFogOp({ mode: 'reveal', shape });
     this.drawLightOutlines(fog);
     this.commitFog();

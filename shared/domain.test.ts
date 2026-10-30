@@ -119,16 +119,24 @@ describe('GM delegation', () => {
 
 describe('fog layers', () => {
   const square = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }];
-  const explored = createExplored(600, 400);
-  markPolygon(explored, square);
+  const conceal = { mode: 'conceal' as const, shape: { kind: 'rect' as const, x: 0, y: 0, w: 100, h: 100 } };
   const p = { x: 50, y: 50 };
+  /** Explored after `ops` GM ops had been painted. */
+  const exploredAfter = (ops: number) => {
+    const g = createExplored(600, 400);
+    markPolygon(g, square, ops + 1);
+    return g;
+  };
   it('explored areas show through the initial cover', () => {
-    expect(isFogged({ initial: 'covered', ops: [], explored }, p)).toBe(false);
+    expect(isFogged({ initial: 'covered', ops: [], explored: exploredAfter(0) }, p)).toBe(false);
   });
-  it("the GM's later conceal beats explored", () => {
-    expect(isFogged({ initial: 'covered', ops: [{ mode: 'conceal', shape: { kind: 'rect', x: 0, y: 0, w: 100, h: 100 } }], explored }, p)).toBe(true);
+  it("fog the GM paints after an area was explored covers it again", () => {
+    expect(isFogged({ initial: 'covered', ops: [conceal], explored: exploredAfter(0) }, p)).toBe(true);
+  });
+  it('exploring after the GM painted fog clears it again', () => {
+    expect(isFogged({ initial: 'covered', ops: [conceal], explored: exploredAfter(1) }, p)).toBe(false);
   });
   it('current light beats everything', () => {
-    expect(isFogged({ initial: 'covered', ops: [{ mode: 'conceal', shape: { kind: 'rect', x: 0, y: 0, w: 100, h: 100 } }], explored, lights: [{ kind: 'polygon', points: square }] }, p)).toBe(false);
+    expect(isFogged({ initial: 'covered', ops: [conceal], explored: exploredAfter(0), lights: [{ kind: 'polygon', points: square }] }, p)).toBe(false);
   });
 });

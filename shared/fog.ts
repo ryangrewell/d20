@@ -4,7 +4,7 @@
  * the same operations, so "is this point hidden from players?" has one answer.
  */
 import type { Point } from './geometry/transform';
-import { exploredContains, type ExploredGrid } from './lighting/explored';
+import { exploredStamp, type ExploredGrid } from './lighting/explored';
 
 export type FogShape =
   | { kind: 'rect'; x: number; y: number; w: number; h: number }
@@ -16,7 +16,7 @@ export type FogOp = { mode: 'reveal' | 'conceal'; shape: FogShape };
 export type FogState = {
   initial: 'covered' | 'revealed';
   ops: FogOp[];
-  /** Area revealed automatically (rooms walked into, remembered torchlight). Below the GM's ops. */
+  /** Area revealed automatically (rooms walked into, remembered torchlight), stamped with when; see lighting/explored. */
   explored?: ExploredGrid;
   /** Current light from party tokens. Shows through everything. */
   lights?: FogShape[];
@@ -60,13 +60,18 @@ export function shapeContains(shape: FogShape, p: Point): boolean {
   }
 }
 
-/** True when players cannot see map point `p`: light, then the GM's ops (last wins), then explored, then the initial state. */
+/** True when players cannot see map point `p`: current light first, then whichever came last of the GM's ops and exploring, then the initial state. */
 export function isFogged(fog: FogState, p: Point): boolean {
   if (fog.lights?.some((s) => shapeContains(s, p))) return false;
+  // Explored area and the GM's ops are compared by time: whichever happened last wins.
+  const explored = fog.explored ? exploredStamp(fog.explored, p) : 0;
   for (let i = fog.ops.length - 1; i >= 0; i--) {
     const op = fog.ops[i]!;
-    if (shapeContains(op.shape, p)) return op.mode === 'conceal';
+    if (!shapeContains(op.shape, p)) continue;
+    // Op i is GM fog op number i + 1; a stamp above that means exploring came after it.
+    if (explored > i + 1) return false;
+    return op.mode === 'conceal';
   }
-  if (fog.explored && exploredContains(fog.explored, p)) return false;
+  if (explored) return false;
   return fog.initial === 'covered';
 }

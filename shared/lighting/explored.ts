@@ -1,29 +1,35 @@
 /**
- * The "explored" fog layer: a bounded bit grid of map area revealed automatically
- * (torchlight in remember mode, rooms walked into). Kept at ≤512 cells on the long
- * side so it stays small however long a session runs; sent run-length encoded.
+ * The "explored" fog layer: area revealed automatically (torchlight in remember mode, rooms
+ * walked into). Each cell remembers *when* it was explored as a stamp: the number of GM fog
+ * ops that existed at the time, plus one. Fog the GM paints afterwards covers it again;
+ * exploring after that paint clears it again. Kept at ≤512 cells on the long side so it
+ * stays small however long a session runs; sent run-length encoded.
  */
 import type { Point } from '../geometry/transform';
 import { pointInPolygon } from '../fog';
 
-export type ExploredGrid = { cellPx: number; cols: number; rows: number; bits: Uint8Array };
+export type ExploredGrid = { cellPx: number; cols: number; rows: number; stamps: Uint16Array };
 
 const MAX_CELLS = 512;
 const MIN_CELL_PX = 4;
+const MAX_STAMP = 0xffff;
+/** First varint of the current encoding; older encodings started with cellPx (always ≥ 4). */
+const FORMAT_STAMPED = 2;
 
 export function createExplored(widthPx: number, heightPx: number): ExploredGrid {
   const cellPx = Math.max(MIN_CELL_PX, Math.ceil(Math.max(widthPx, heightPx) / MAX_CELLS));
   const cols = Math.max(1, Math.ceil(widthPx / cellPx));
   const rows = Math.max(1, Math.ceil(heightPx / cellPx));
-  return { cellPx, cols, rows, bits: new Uint8Array(Math.ceil((cols * rows) / 8)) };
+  return { cellPx, cols, rows, stamps: new Uint16Array(cols * rows) };
 }
 
-const getBit = (g: ExploredGrid, i: number) => (g.bits[i >> 3]! >> (i & 7)) & 1;
-const setBit = (g: ExploredGrid, i: number) => (g.bits[i >> 3]! |= 1 << (i & 7));
-
-/** Marks every cell whose centre is inside the polygon. Returns whether any cell was newly marked. */
-export function markPolygon(g: ExploredGrid, points: Point[]): boolean {
+/**
+ * Stamps every cell whose centre is inside the polygon with `stamp`, unless it already has a
+ * newer one. Returns whether anything changed.
+ */
+export function markPolygon(g: ExploredGrid, points: Point[], stamp: number): boolean {
   if (points.length < 3) return false;
+  const s = Math.max(1, Math.min(MAX_STAMP, Math.floor(stamp)));
   const xs = points.map((p) => p.x);
   const ys = points.map((p) => p.y);
   const c0 = Math.max(0, Math.floor(Math.min(...xs) / g.cellPx));
@@ -34,9 +40,9 @@ export function markPolygon(g: ExploredGrid, points: Point[]): boolean {
   for (let r = r0; r <= r1; r++) {
     for (let c = c0; c <= c1; c++) {
       const i = r * g.cols + c;
-      if (getBit(g, i)) continue;
+      if (g.stamps[i]! >= s) continue;
       if (pointInPolygon({ x: (c + 0.5) * g.cellPx, y: (r + 0.5) * g.cellPx }, points)) {
-        setBit(g, i);
+        g.stamps[i] = s;
         changed = true;
       }
     }
@@ -44,24 +50,23 @@ export function markPolygon(g: ExploredGrid, points: Point[]): boolean {
   return changed;
 }
 
-export function exploredContains(g: ExploredGrid, p: Point): boolean {
+/** When `p` was last explored (0 = never). */
+export function exploredStamp(g: ExploredGrid, p: Point): number {
   const c = Math.floor(p.x / g.cellPx);
   const r = Math.floor(p.y / g.cellPx);
-  if (c < 0 || r < 0 || c >= g.cols || r >= g.rows) return false;
-  return getBit(g, r * g.cols + c) === 1;
+  if (c < 0 || r < 0 || c >= g.cols || r >= g.rows) return 0;
+  return g.stamps[r * g.cols + c]!;
 }
 
-/** Calls `fn(row, colStart, colEnd)` for each horizontal run of marked cells (for drawing). */
-export function forEachExploredRun(g: ExploredGrid, fn: (row: number, c0: number, c1: number) => void) {
+/** Calls `fn(row, colStart, colEnd, stamp)` for each horizontal run of cells explored at the same time. */
+export function forEachExploredRun(g: ExploredGrid, fn: (row: number, c0: number, c1: number, stamp: number) => void) {
   for (let r = 0; r < g.rows; r++) {
-    let start = -1;
-    for (let c = 0; c <= g.cols; c++) {
-      const on = c < g.cols && getBit(g, r * g.cols + c) === 1;
-      if (on && start < 0) start = c;
-      if (!on && start >= 0) {
-        fn(r, start, c - 1);
-        start = -1;
-      }
+    let start = 0;
+    for (let c = 1; c <= g.cols; c++) {
+      const prev = g.stamps[r * g.cols + c - 1]!;
+      if (c < g.cols && g.stamps[r * g.cols + c] === prev) continue;
+      if (prev) fn(r, start, c - 1, prev);
+      start = c;
     }
   }
 }
@@ -74,31 +79,26 @@ function pushVarint(out: number[], n: number) {
   out.push(n);
 }
 
-function toBase64(bytes: number[] | Uint8Array): string {
+function toBase64(bytes: number[]): string {
   let s = '';
   for (const b of bytes) s += String.fromCharCode(b);
   return btoa(s);
 }
 
-/** Header (cellPx, cols, rows) then alternating run lengths starting with unmarked cells, as varints, base64. */
+/** Format marker, cellPx, cols, rows, then (stamp, run length) pairs over the cells, as varints, base64. */
 export function encodeExplored(g: ExploredGrid): string {
   const out: number[] = [];
-  pushVarint(out, g.cellPx);
-  pushVarint(out, g.cols);
-  pushVarint(out, g.rows);
+  for (const n of [FORMAT_STAMPED, g.cellPx, g.cols, g.rows]) pushVarint(out, n);
   const total = g.cols * g.rows;
-  let current = 0;
-  let run = 0;
-  for (let i = 0; i < total; i++) {
-    const bit = getBit(g, i);
-    if (bit === current) run++;
-    else {
-      pushVarint(out, run);
-      current = bit;
-      run = 1;
-    }
+  let i = 0;
+  while (i < total) {
+    const v = g.stamps[i]!;
+    let j = i + 1;
+    while (j < total && g.stamps[j] === v) j++;
+    pushVarint(out, v);
+    pushVarint(out, j - i);
+    i = j;
   }
-  pushVarint(out, run);
   return toBase64(out);
 }
 
@@ -115,17 +115,29 @@ export function decodeExplored(s: string): ExploredGrid {
       shift += 7;
     }
   };
-  const cellPx = read();
+  const first = read();
+  const stamped = first === FORMAT_STAMPED;
+  const cellPx = stamped ? read() : first;
   const cols = read();
   const rows = read();
-  const g: ExploredGrid = { cellPx, cols, rows, bits: new Uint8Array(Math.ceil((cols * rows) / 8)) };
+  const g: ExploredGrid = { cellPx, cols, rows, stamps: new Uint16Array(cols * rows) };
   let i = 0;
-  let bit = 0;
+  if (stamped) {
+    while (pos < bin.length) {
+      const v = read();
+      const run = read();
+      if (v) g.stamps.fill(v, i, i + run);
+      i += run;
+    }
+    return g;
+  }
+  // Earlier format: alternating unexplored/explored run lengths. Treat it as explored before any GM fog.
+  let on = false;
   while (pos < bin.length) {
     const run = read();
-    if (bit) for (let k = 0; k < run; k++) setBit(g, i + k);
+    if (on) g.stamps.fill(1, i, i + run);
     i += run;
-    bit ^= 1;
+    on = !on;
   }
   return g;
 }
