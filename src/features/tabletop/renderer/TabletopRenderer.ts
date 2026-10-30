@@ -10,6 +10,7 @@ import { mapToScreen, type Camera, type Point } from '@shared/geometry/transform
 import { gridColorNumber, gridSpacingPixels, shouldDrawGrid } from '@shared/geometry/grid';
 import { hexGridPolygons, squareGridSegments } from '@shared/geometry/gridLines';
 import type { FogOp, FogShape, FogState } from '@shared/fog';
+import { forEachExploredRun } from '@shared/lighting/explored';
 import type { MapDefinition } from '@shared/model';
 import type { Ping, RemoteCursor, TableObject } from '../store';
 
@@ -33,6 +34,8 @@ export class TabletopRenderer {
   private tokens = new Container();
   private fogSprite = new Sprite();
   private overlayG = new Graphics();
+  /** GM-only outline of what torchlight shows the players. */
+  private lightG = new Graphics();
   private screenLayer = new Container();
   private overlayText = new Text({ text: '', style: { fontFamily: 'Inter', fontSize: 13, fill: 0xffffff, fontWeight: '600', stroke: { color: 0x000000, width: 4 } } });
   private cursorLayer = new Container();
@@ -49,6 +52,7 @@ export class TabletopRenderer {
   private ready = false;
   private destroyed = false;
   private isGM = false;
+  private lastFog: FogState | null = null;
   private lastObjects: TableObject[] = [];
   private lastCtx = { selectedId: null as string | null, mySub: '' };
 
@@ -61,7 +65,7 @@ export class TabletopRenderer {
     host.appendChild(this.app.canvas);
     this.app.canvas.setAttribute('aria-hidden', 'true');
     this.app.canvas.style.display = 'block';
-    this.world.addChild(this.background, this.gridG, this.tokens, this.fogSprite, this.overlayG);
+    this.world.addChild(this.background, this.gridG, this.tokens, this.fogSprite, this.lightG, this.overlayG);
     this.screenLayer.addChild(this.pingG, this.cursorLayer, this.overlayText);
     this.app.stage.addChild(this.world, this.screenLayer);
     this.tokens.sortableChildren = true;
@@ -106,6 +110,7 @@ export class TabletopRenderer {
     this.world.position.set(-cam.x * cam.zoom, -cam.y * cam.zoom);
     this.redrawGrid();
     this.rescaleLabels();
+    if (this.lastFog) this.drawLightOutlines(this.lastFog);
   }
 
   getCamera() {
@@ -142,22 +147,47 @@ export class TabletopRenderer {
     this.fogTexture = null;
   }
 
+  /** Same order as `isFogged`: initial, explored area, the GM's ops, then current light on top. */
   setFog(fog: FogState, isGM: boolean) {
     this.isGM = isGM;
+    this.lastFog = fog;
     const ctx = this.fogCtx;
+    const k = this.fogScale;
     ctx.globalCompositeOperation = 'source-over';
     ctx.clearRect(0, 0, this.fogCanvas.width, this.fogCanvas.height);
     if (fog.initial === 'covered') {
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, this.fogCanvas.width, this.fogCanvas.height);
     }
+    if (fog.explored) {
+      const g = fog.explored;
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = '#000';
+      // Slight overlap hides seams between cells when scaled.
+      forEachExploredRun(g, (r, c0, c1) => ctx.fillRect(c0 * g.cellPx * k, r * g.cellPx * k, (c1 - c0 + 1) * g.cellPx * k + 0.5, g.cellPx * k + 0.5));
+    }
     for (const op of fog.ops) this.drawFogOp(op);
+    for (const shape of fog.lights ?? []) this.drawFogOp({ mode: 'reveal', shape });
+    this.drawLightOutlines(fog);
     this.commitFog();
   }
 
   appendFogOp(op: FogOp) {
+    // Light must stay on top of the GM's ops, so with light present redraw everything.
+    if (this.lastFog?.lights?.length) return this.setFog({ ...this.lastFog, ops: [...this.lastFog.ops, op] }, this.isGM);
+    if (this.lastFog) this.lastFog = { ...this.lastFog, ops: [...this.lastFog.ops, op] };
     this.drawFogOp(op);
     this.commitFog();
+  }
+
+  private drawLightOutlines(fog: FogState) {
+    const g = this.lightG;
+    g.clear();
+    if (!this.isGM) return;
+    for (const shape of fog.lights ?? []) {
+      if (shape.kind !== 'polygon') continue;
+      g.poly(shape.points.flatMap((p) => [p.x, p.y]), true).stroke({ width: 2 / this.camera.zoom, color: 0xf2c14e, alpha: 0.7 });
+    }
   }
 
   private drawFogOp(op: FogOp) {

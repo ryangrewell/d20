@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { SessionSnapshotDto } from '@shared/dto';
-import type { FogOp, FogState } from '@shared/fog';
+import { isFogged, type FogOp, type FogState } from '@shared/fog';
 import type { ChatMessage, SceneObject } from '@shared/model';
 import type { PublicSceneObject } from '@shared/projection';
 import type { ConnectionStatus } from '@/lib/realtime/transport';
@@ -87,4 +87,4 @@ export const setTable = useTable.setState;
 export const getTable = useTable.getState;
 
 // Development-only hook so end-to-end tests can read canvas state.
-if (import.meta.env.DEV) (window as unknown as { __d20?: unknown }).__d20 = { getTable, setTable };
+if (import.meta.env.DEV) (window as unknown as { __d20?: unknown }).__d20 = { getTable, setTable, isFoggedAt: (p: { x: number; y: number }) => isFogged(getTable().fog, p) };
