@@ -114,4 +114,32 @@ d('encounters, journal and chat history', () => {
     expect(alicePage.messages.map((m: { body: string }) => m.body)).toContain('secret for alice');
     expect((await bob.call('GET', `/campaigns/${campaignId}/chat?before=not-an-id`)).status).toBe(400);
   });
+
+  it('renames and deletes maps, taking their scenes along but never one that is on the table', async () => {
+    const png = await makePng(300, 300);
+    const intent = (await gm.call('POST', `/campaigns/${campaignId}/maps/upload-intent`, { fileName: 'x.png', contentType: 'image/png', bytes: png.length })).body;
+    await fetch(intent.uploadUrl, { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: new Blob([Buffer.from(png)]) });
+    const map = (await gm.call('POST', `/campaigns/${campaignId}/maps`, { assetId: intent.assetId, name: 'Wrong name' })).body;
+    expect((await gm.call('PATCH', `/campaigns/${campaignId}/maps/${map.id}`, { name: 'Cellar' })).body.name).toBe('Cellar');
+
+    const cellar = (await gm.call('POST', `/campaigns/${campaignId}/scenes`, { mapId: map.id, name: 'Cellar' })).body;
+    await gm.command(sessionId, 'spawnSceneObject', { sceneId: cellar.id, objectType: 'CREATURE', x: 10, y: 10, visibility: 'GM_ONLY', appearance: { label: 'Rat', tint: '#b23a48' } });
+    expect((await h.deps.db.keysInPartition(`SCENE#${cellar.id}`)).map((k) => k.SK.split('#')[0])).toEqual(expect.arrayContaining(['META', 'OBJ']));
+    const fieldMapId = (await gm.call('GET', `/campaigns/${campaignId}`)).body.scenes.find((s: { id: string }) => s.id === sceneId).mapId;
+
+    expect((await alice.call('DELETE', `/campaigns/${campaignId}/maps/${map.id}`)).status).toBe(403);
+    // The live session's active scene is on the Field map, so that one is refused.
+    const live = await gm.call('DELETE', `/campaigns/${campaignId}/maps/${fieldMapId}`);
+    expect(live.status).toBe(409);
+    expect(live.body.error.message).toMatch(/on the table/);
+
+    const del = await gm.call('DELETE', `/campaigns/${campaignId}/maps/${map.id}`);
+    expect(del.status).toBe(200);
+    expect(del.body).toEqual({ deletedScenes: 1 });
+    const dash = (await gm.call('GET', `/campaigns/${campaignId}`)).body;
+    expect(dash.maps.map((m: { id: string }) => m.id)).not.toContain(map.id);
+    expect(dash.scenes.map((s: { id: string }) => s.id)).not.toContain(cellar.id);
+    expect(await h.deps.db.keysInPartition(`SCENE#${cellar.id}`)).toEqual([]);
+    expect((await gm.call('GET', `/campaigns/${campaignId}/maps/${map.id}`)).status).toBe(404);
+  });
 });

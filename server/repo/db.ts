@@ -117,6 +117,20 @@ export class Db {
     return out;
   }
 
+  /** Every key in a partition (no attributes), for cascading deletes. */
+  async keysInPartition(pk: string): Promise<Key[]> {
+    const out: Key[] = [];
+    let ExclusiveStartKey: Record<string, unknown> | undefined;
+    do {
+      const r = await this.doc.send(
+        new QueryCommand({ TableName: this.table, KeyConditionExpression: 'PK = :pk', ExpressionAttributeValues: { ':pk': pk }, ProjectionExpression: 'PK, SK', ...(ExclusiveStartKey ? { ExclusiveStartKey } : {}) }),
+      );
+      for (const item of r.Items ?? []) out.push({ PK: item.PK as string, SK: item.SK as string });
+      ExclusiveStartKey = r.LastEvaluatedKey;
+    } while (ExclusiveStartKey);
+    return out;
+  }
+
   async queryPrefix<T>(pk: string, skPrefix: string, opts: { index?: 'GSI1'; forward?: boolean; limit?: number } = {}): Promise<T[]> {
     const pkName = opts.index ? `${opts.index}PK` : 'PK';
     const skName = opts.index ? `${opts.index}SK` : 'SK';

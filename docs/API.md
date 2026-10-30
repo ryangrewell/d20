@@ -20,7 +20,8 @@ All routes are under `/api`. They need `Authorization: Bearer <Cognito ID token>
 | POST | `/commands` | Game command envelope (below) |
 | POST | `/campaigns/:cid/maps/upload-intent` | GM; returns presigned PUT (5 min) |
 | POST | `/campaigns/:cid/maps` | GM; finalize: sniff signature/dimensions, create map |
-| GET/PATCH | `/campaigns/:cid/maps/:mid` | GM; calibration + grid |
+| GET/PATCH | `/campaigns/:cid/maps/:mid` | GM; name, calibration + grid |
+| DELETE | `/campaigns/:cid/maps/:mid` | GM; deletes the map and its scenes (tokens, fog, checkpoints). 409 if one of them is the active scene of a live/paused session; planned sessions drop it. Returns `{ deletedScenes }` |
 | POST/PATCH | `/campaigns/:cid/scenes[/:scid]` | GM |
 | GET/POST | `/campaigns/:cid/characters` | List (own sheets in full, others by name only; GM sees all) / create (GM may set `ownerSub`) |
 | POST | `/campaigns/:cid/characters/import` | `{ data: <d20.character v1 export>, ownerSub? }` |

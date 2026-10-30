@@ -1,8 +1,8 @@
 import { ulid } from 'ulid';
 import type { z } from 'zod';
-import { AppError, invalid, notFound } from '@shared/errors';
+import { AppError, conflict, invalid, notFound } from '@shared/errors';
 import { sniffImage } from '@shared/image';
-import type { MapAsset, MapDefinition, Scene } from '@shared/model';
+import type { GameSession, MapAsset, MapDefinition, Scene } from '@shared/model';
 import type { CreateSceneInput, FinalizeMapInput, UpdateMapInput, UpdateSceneInput, UploadMapIntentInput } from '@shared/schemas/api';
 import { keys, type TxItem } from '../repo/db';
 import { loadCampaign, requireActiveCampaign, requireGM, type Actor, type Deps } from '../context';
@@ -121,6 +121,31 @@ export async function updateMap(deps: Deps, actor: Actor, campaignId: string, ma
   if (next.grid.type !== 'none' && !next.calibration) throw invalid('Calibrate the map scale before enabling a grid.');
   await deps.db.put({ ...keys.map(campaignId, mapId), entity: 'Map', ...next });
   return next;
+}
+
+/**
+ * Deletes a map and every scene built on it (tokens, fog, checkpoints). Refused while one of
+ * those scenes is on the table in a live or paused session; planned sessions just lose it.
+ * Characters are untouched, and the uploaded image stays in versioned storage.
+ */
+export async function deleteMap(deps: Deps, actor: Actor, campaignId: string, mapId: string) {
+  await gmContext(deps, actor, campaignId);
+  const map = await deps.db.get<MapDefinition>(keys.map(campaignId, mapId));
+  if (!map) throw notFound('Map');
+  const scenes = (await deps.db.queryPrefix<Scene>(`CAMP#${campaignId}`, 'SCENE#', { index: 'GSI1' })).filter((s) => s.mapId === mapId);
+  const sceneIds = new Set(scenes.map((s) => s.id));
+  const sessions = (await deps.db.queryPrefix<GameSession>(`CAMP#${campaignId}`, 'SESSION#', { index: 'GSI1' })).filter((s) => s.activeSceneId && sceneIds.has(s.activeSceneId));
+  const onTable = sessions.find((s) => s.status === 'LIVE' || s.status === 'PAUSED');
+  if (onTable) {
+    const name = scenes.find((s) => s.id === onTable.activeSceneId)?.name ?? 'One of its scenes';
+    throw conflict(`${name} is on the table in ${onTable.title}. Switch the table to another scene or end the session first.`);
+  }
+  for (const s of sessions.filter((x) => x.status === 'PLANNED')) {
+    await deps.db.update({ Key: keys.session(s.id), UpdateExpression: 'REMOVE activeSceneId' });
+  }
+  for (const s of scenes) await deps.db.batchWrite((await deps.db.keysInPartition(`SCENE#${s.id}`)).map((k) => ({ delete: k })));
+  await deps.db.delete(keys.map(campaignId, mapId));
+  return { deletedScenes: scenes.length };
 }
 
 // ------------------------------------------------------------------ scenes

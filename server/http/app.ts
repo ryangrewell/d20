@@ -158,6 +158,7 @@ export function createApp(deps: Deps, verify: TokenVerifier, extra?: (app: Hono<
   app.post('/campaigns/:cid/maps', async (c) => c.json(await maps.finalizeMap(deps, c.get('actor'), id(c, 'cid'), await body(c, FinalizeMapInput)), 201));
   app.get('/campaigns/:cid/maps/:mid', async (c) => c.json(await maps.getMap(deps, c.get('actor'), id(c, 'cid'), id(c, 'mid'))));
   app.patch('/campaigns/:cid/maps/:mid', async (c) => c.json(await maps.updateMap(deps, c.get('actor'), id(c, 'cid'), id(c, 'mid'), await body(c, UpdateMapInput))));
+  app.delete('/campaigns/:cid/maps/:mid', async (c) => c.json(await maps.deleteMap(deps, c.get('actor'), id(c, 'cid'), id(c, 'mid'))));
   app.post('/campaigns/:cid/scenes', async (c) => c.json(await maps.createScene(deps, c.get('actor'), id(c, 'cid'), await body(c, CreateSceneInput)), 201));
   app.patch('/campaigns/:cid/scenes/:scid', async (c) => c.json(await maps.updateScene(deps, c.get('actor'), id(c, 'cid'), id(c, 'scid'), await body(c, UpdateSceneInput))));
 

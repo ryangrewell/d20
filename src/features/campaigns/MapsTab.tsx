@@ -1,10 +1,10 @@
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Hammer, ImagePlus, Layers, Ruler, Upload } from 'lucide-react';
+import { Hammer, ImagePlus, Layers, Pencil, Ruler, Trash2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import type { CampaignDashboardDto } from '@shared/dto';
 import { MAP_CATEGORIES } from '@shared/schemas/api';
-import { campaignApi, useCampaignMutation } from '@/lib/api/hooks';
+import { campaignApi, qk, useCampaignMutation } from '@/lib/api/hooks';
 import { Badge, Button, Card, EmptyState, ErrorNotice, Field, Input, Select } from '@/components/ui/primitives';
 import { Dialog } from '@/components/ui/dialog';
 
@@ -15,6 +15,14 @@ export function MapsTab({ data }: { data: CampaignDashboardDto }) {
   const { campaign, maps, scenes } = data;
   const [uploading, setUploading] = useState(false);
   const [sceneFor, setSceneFor] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<{ kind: 'map' | 'scene'; id: string; name: string } | null>(null);
+  const remove = useCampaignMutation(campaign.id, (mapId: string) => campaignApi.deleteMap(campaign.id, mapId));
+  const confirmDelete = (m: { id: string; name: string }) => {
+    const on = scenes.filter((s) => s.mapId === m.id);
+    const what = on.length ? `\n\nThis also deletes ${on.length === 1 ? 'its scene' : `its ${on.length} scenes`} (${on.map((s) => s.name).join(', ')}) with ${on.length === 1 ? 'its' : 'their'} tokens and fog. Characters are not affected.` : '';
+    if (!confirm(`Delete the map “${m.name}”?${what}\n\nThis can't be undone.`)) return;
+    remove.mutate(m.id, { onSuccess: () => toast.success(`${m.name} deleted`), onError: (e) => toast.error((e as Error).message) });
+  };
 
   return (
     <div className="space-y-8">
@@ -41,8 +49,8 @@ export function MapsTab({ data }: { data: CampaignDashboardDto }) {
             {maps.map((m) => (
               <Card key={m.id} className="p-4">
                 <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h3 className="font-semibold">{m.name}</h3>
+                  <div className="min-w-0">
+                    <h3 className="break-words font-semibold">{m.name}</h3>
                     <p className="text-xs text-faint">
                       {m.widthPx} × {m.heightPx} px · {m.category}
                     </p>
@@ -64,6 +72,14 @@ export function MapsTab({ data }: { data: CampaignDashboardDto }) {
                   <Button size="sm" variant="outline" onClick={() => setSceneFor(m.id)}>
                     <Layers className="h-4 w-4" aria-hidden /> New scene
                   </Button>
+                  <div className="ml-auto flex">
+                    <Button size="icon" variant="ghost" aria-label={`Rename ${m.name}`} title="Rename" onClick={() => setRenaming({ kind: 'map', id: m.id, name: m.name })}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button size="icon" variant="ghost" aria-label={`Delete ${m.name}`} title="Delete" disabled={remove.isPending} onClick={() => confirmDelete(m)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </Card>
             ))}
@@ -83,7 +99,12 @@ export function MapsTab({ data }: { data: CampaignDashboardDto }) {
                   <span className="font-medium">{s.name}</span>
                   <span className="ml-2 text-xs text-faint">{maps.find((m) => m.id === s.mapId)?.name}</span>
                 </div>
-                <span className="text-xs text-faint">Switch scenes from the live table</span>
+                <div className="flex items-center gap-1">
+                  <span className="hidden text-xs text-faint sm:inline">Switch scenes from the live table</span>
+                  <Button size="icon" variant="ghost" aria-label={`Rename ${s.name}`} title="Rename" onClick={() => setRenaming({ kind: 'scene', id: s.id, name: s.name })}>
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </div>
               </Card>
             ))}
           </div>
@@ -91,8 +112,42 @@ export function MapsTab({ data }: { data: CampaignDashboardDto }) {
       </section>
 
       <UploadMapDialog campaignId={campaign.id} open={uploading} onOpenChange={setUploading} />
+      {renaming && <RenameDialog campaignId={campaign.id} target={renaming} onClose={() => setRenaming(null)} />}
       {sceneFor && <CreateSceneDialog campaignId={campaign.id} mapId={sceneFor} mapName={maps.find((m) => m.id === sceneFor)?.name ?? ''} onClose={() => setSceneFor(null)} />}
     </div>
+  );
+}
+
+function RenameDialog({ campaignId, target, onClose }: { campaignId: string; target: { kind: 'map' | 'scene'; id: string; name: string }; onClose: () => void }) {
+  const [name, setName] = useState(target.name);
+  const save = useCampaignMutation(
+    campaignId,
+    (v: string): Promise<unknown> => (target.kind === 'map' ? campaignApi.updateMap(campaignId, target.id, { name: v }) : campaignApi.updateScene(campaignId, target.id, { name: v })),
+    target.kind === 'map' ? [[...qk.map(campaignId, target.id)]] : [],
+  );
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()} title={`Rename ${target.kind}`}>
+      <form
+        className="space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          save.mutate(name.trim(), { onSuccess: () => (toast.success(`${target.kind === 'map' ? 'Map' : 'Scene'} renamed`), onClose()) });
+        }}
+      >
+        {save.error && <ErrorNotice error={save.error} />}
+        <Field label="Name" htmlFor="renameInput">
+          <Input id="renameInput" autoFocus maxLength={80} value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={!name.trim() || name.trim() === target.name} loading={save.isPending}>
+            Save
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }
 

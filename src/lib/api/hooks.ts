@@ -101,5 +101,7 @@ export const campaignApi = {
     api<{ assetId: string; uploadUrl: string; headers: Record<string, string> }>(`/campaigns/${id}/maps/upload-intent`, { body: input }),
   finalizeMap: (id: string, input: { assetId: string; name: string; category: string }) => api<MapDefinition>(`/campaigns/${id}/maps`, { body: input }),
   updateMap: (id: string, mapId: string, input: unknown) => api<MapDefinition>(`/campaigns/${id}/maps/${mapId}`, { method: 'PATCH', body: input }),
+  deleteMap: (id: string, mapId: string) => api<{ deletedScenes: number }>(`/campaigns/${id}/maps/${mapId}`, { method: 'DELETE' }),
   createScene: (id: string, input: { mapId: string; name: string; fogInitial: 'covered' | 'revealed' }) => api<Scene>(`/campaigns/${id}/scenes`, { body: input }),
+  updateScene: (id: string, sceneId: string, input: { name?: string; gmNotes?: string }) => api<Scene>(`/campaigns/${id}/scenes/${sceneId}`, { method: 'PATCH', body: input }),
 };
