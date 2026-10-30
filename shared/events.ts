@@ -7,7 +7,7 @@
  */
 import type { ChatMessage, CursorPacket, InitiativeState, PresenterFocus } from './model';
 import type { PublicScene, PublicSceneObject, PublicSession } from './projection';
-import type { FogOp, FogShape } from './fog';
+import type { FogOp } from './fog';
 
 export const GAME_NAMESPACE = 'game';
 export const PRESENCE_NAMESPACE = 'presence';
