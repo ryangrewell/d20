@@ -8,7 +8,6 @@ import type { SceneObject } from '../model';
 import type { Segment } from './walls';
 
 const BASE_RAYS = 96;
-const MAX_POINTS = 200;
 const EPS = 0.0001;
 
 /** Party tokens: player characters and anything a player controls. */
@@ -27,27 +26,63 @@ function hitDistance(o: Point, dx: number, dy: number, w: Segment): number {
   return t >= 0 && u >= 0 && u <= 1 ? t : Infinity;
 }
 
-/** Visibility polygon around `origin`, capped at `radiusPx` and stopped by `walls`. */
+/**
+ * Visibility polygon around `origin`, capped at `radiusPx` and stopped by `walls`.
+ * Rays go to every wall corner (just either side of it) and to every point where a wall
+ * crosses the light's edge, so the polygon's straight edges never cut behind a wall;
+ * evenly spaced rays round out the open edge of the light.
+ */
 export function lightPolygon(origin: Point, radiusPx: number, walls: Segment[]): Point[] {
-  const near = walls.filter((w) => Math.min(Math.hypot(w.a.x - origin.x, w.a.y - origin.y), Math.hypot(w.b.x - origin.x, w.b.y - origin.y)) <= radiusPx * 2 || segmentNear(origin, w, radiusPx));
+  const near = walls.filter((w) => segmentNear(origin, w, radiusPx));
   const angles: number[] = [];
   for (let i = 0; i < BASE_RAYS; i++) angles.push((i / BASE_RAYS) * Math.PI * 2);
+  const toward = (p: Point) => {
+    const a = Math.atan2(p.y - origin.y, p.x - origin.x);
+    angles.push(a - EPS, a, a + EPS);
+  };
   for (const w of near) {
-    for (const p of [w.a, w.b]) {
-      if (Math.hypot(p.x - origin.x, p.y - origin.y) > radiusPx) continue;
-      const a = Math.atan2(p.y - origin.y, p.x - origin.x);
-      angles.push(a - EPS, a + EPS);
-    }
+    for (const p of [w.a, w.b]) if (Math.hypot(p.x - origin.x, p.y - origin.y) <= radiusPx) toward(p);
+    for (const p of circleCrossings(origin, radiusPx, w)) toward(p);
   }
-  let sorted = angles.map((a) => (a + Math.PI * 4) % (Math.PI * 2)).sort((a, b) => a - b);
-  if (sorted.length > MAX_POINTS) sorted = Array.from({ length: MAX_POINTS }, (_, i) => sorted[Math.floor((i * sorted.length) / MAX_POINTS)]!);
-  return sorted.map((a) => {
+  const sorted = angles.map((a) => (a + Math.PI * 4) % (Math.PI * 2)).sort((a, b) => a - b);
+  const points = sorted.map((a) => {
     const dx = Math.cos(a);
     const dy = Math.sin(a);
     let t = radiusPx;
     for (const w of near) t = Math.min(t, hitDistance(origin, dx, dy, w));
     return { x: origin.x + dx * t, y: origin.y + dy * t };
   });
+  return simplify(points);
+}
+
+/** Where a wall crosses the circle of light. */
+function circleCrossings(o: Point, r: number, w: Segment): Point[] {
+  const dx = w.b.x - w.a.x;
+  const dy = w.b.y - w.a.y;
+  const fx = w.a.x - o.x;
+  const fy = w.a.y - o.y;
+  const a = dx * dx + dy * dy;
+  const b = 2 * (fx * dx + fy * dy);
+  const c = fx * fx + fy * fy - r * r;
+  const disc = b * b - 4 * a * c;
+  if (a === 0 || disc < 0) return [];
+  const sq = Math.sqrt(disc);
+  return [(-b - sq) / (2 * a), (-b + sq) / (2 * a)].filter((t) => t >= 0 && t <= 1).map((t) => ({ x: w.a.x + t * dx, y: w.a.y + t * dy }));
+}
+
+/** Drops points that sit on a straight line between their neighbours (most hits along one wall). */
+function simplify(points: Point[]): Point[] {
+  if (points.length < 4) return points;
+  const out: Point[] = [];
+  for (let i = 0; i < points.length; i++) {
+    const prev = out.length ? out[out.length - 1]! : points[points.length - 1]!;
+    const cur = points[i]!;
+    const next = points[(i + 1) % points.length]!;
+    const cross = (cur.x - prev.x) * (next.y - prev.y) - (cur.y - prev.y) * (next.x - prev.x);
+    const len = Math.hypot(next.x - prev.x, next.y - prev.y) || 1;
+    if (Math.abs(cross) / len > 0.05) out.push(cur);
+  }
+  return out.length >= 3 ? out : points;
 }
 
 function segmentNear(o: Point, w: Segment, r: number): boolean {
