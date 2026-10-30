@@ -12,7 +12,8 @@ export type WallRoom = { id: string; name?: string; points: Point[] };
 /** `generated`: derived from the interior generator (read-only in the editor). */
 export type MapWalls = { rooms: WallRoom[]; doorways: Segment[]; generated?: boolean };
 
-const DOORWAY_TOLERANCE = 2;
+/** Doorways also open walls drawn up to this far away (hand-drawn neighbours rarely touch exactly). */
+const DOORWAY_TOLERANCE = 6;
 const EDGE_TOLERANCE = 0.5;
 
 function edges(points: Point[]): Segment[] {
@@ -61,6 +62,19 @@ export function wallSegments(walls: MapWalls): Segment[] {
 /** Rooms that contain `p`; a point on a wall counts as inside every room sharing that wall. */
 export function roomsContaining(walls: MapWalls, p: Point): WallRoom[] {
   return walls.rooms.filter((r) => r.points.length >= 3 && (pointInPolygon(p, r.points) || edges(r.points).some((e) => distToSegmentSq(p, e.a, e.b) <= EDGE_TOLERANCE ** 2)));
+}
+
+/** Lines a point up with nearby room corners on each axis, so hand-drawn walls meet cleanly. */
+export function snapToRooms(walls: MapWalls, p: Point, tol: number): Point {
+  let { x, y } = p;
+  let [bx, by] = [tol, tol];
+  for (const r of walls.rooms) {
+    for (const v of r.points) {
+      if (Math.abs(v.x - p.x) <= bx) [x, bx] = [v.x, Math.abs(v.x - p.x)];
+      if (Math.abs(v.y - p.y) <= by) [y, by] = [v.y, Math.abs(v.y - p.y)];
+    }
+  }
+  return { x, y };
 }
 
 /** A generated floor's rooms (every kind) and doors, in map pixels. Windows stay solid walls. */

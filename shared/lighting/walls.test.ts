@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { generateFloorplan } from '../generator/floorplan';
-import { floorplanToWalls, roomsContaining, wallSegments, type MapWalls } from './walls';
+import { floorplanToWalls, roomsContaining, snapToRooms, wallSegments, type MapWalls } from './walls';
 
 const rect = (id: string, x: number, y: number, w: number, h: number) => ({ id, points: [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }] });
 const key = (s: { a: { x: number; y: number }; b: { x: number; y: number } }) => [s.a, s.b].map((p) => `${p.x},${p.y}`).sort().join('|');
@@ -18,6 +18,21 @@ describe('wallSegments', () => {
   it('lists an edge shared by two rooms once', () => {
     const walls: MapWalls = { rooms: [rect('a', 0, 0, 100, 100), rect('b', 100, 0, 100, 100)], doorways: [] };
     expect(wallSegments(walls)).toHaveLength(7);
+  });
+});
+
+describe('hand-drawn rooms', () => {
+  it('a doorway also opens the neighbouring wall drawn a few pixels away', () => {
+    const walls: MapWalls = { rooms: [rect('a', 0, 0, 100, 100), rect('b', 104, 0, 100, 100)], doorways: [{ a: { x: 100, y: 40 }, b: { x: 100, y: 60 } }] };
+    const blocking = wallSegments(walls).filter((s) => s.a.x === s.b.x && Math.min(s.a.y, s.b.y) <= 50 && Math.max(s.a.y, s.b.y) >= 50);
+    expect(blocking.map((s) => s.a.x).sort((x, y) => x - y)).toEqual([0, 204]);
+  });
+
+  it('snaps a new corner onto nearby room corners so walls line up', () => {
+    const walls: MapWalls = { rooms: [rect('a', 0, 0, 100, 100)], doorways: [] };
+    expect(snapToRooms(walls, { x: 103, y: 97 }, 6)).toEqual({ x: 100, y: 100 });
+    expect(snapToRooms(walls, { x: 103, y: 50 }, 6)).toEqual({ x: 100, y: 50 });
+    expect(snapToRooms(walls, { x: 130, y: 50 }, 6)).toEqual({ x: 130, y: 50 });
   });
 });
 

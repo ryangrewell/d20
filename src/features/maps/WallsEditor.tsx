@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { DoorOpen, Eraser, Pentagon, Square, Trash2 } from 'lucide-react';
 import { distToSegmentSq } from '@shared/fog';
 import type { Point } from '@shared/geometry/transform';
-import { roomsContaining, type MapWalls, type Segment, type WallRoom } from '@shared/lighting/walls';
+import { roomsContaining, snapToRooms, type MapWalls, type Segment, type WallRoom } from '@shared/lighting/walls';
 import { Button, Input, cn } from '@/components/ui/primitives';
 
 export type WallTool = 'room-rect' | 'room-shape' | 'doorway' | 'erase';
@@ -77,8 +77,9 @@ export function useWallsEditor(initial: MapWalls | undefined, bounds: { w: numbe
       setDoorStart(null);
     },
     down(tool: WallTool, raw: Point, zoom: number) {
-      const p = clamp(raw);
       const tol = SNAP_SCREEN_PX / zoom;
+      // New room corners line up with existing ones so neighbouring walls meet.
+      const p = tool === 'room-rect' || tool === 'room-shape' ? clamp(snapToRooms(walls, raw, tol)) : clamp(raw);
       if (tool === 'room-rect') setRect([p, p]);
       if (tool === 'room-shape') {
         if (shape.length >= 3 && Math.hypot(p.x - shape[0]!.x, p.y - shape[0]!.y) <= tol) closeShape(shape);
@@ -102,8 +103,8 @@ export function useWallsEditor(initial: MapWalls | undefined, bounds: { w: numbe
         if (hit) change({ ...walls, rooms: walls.rooms.filter((r) => r.id !== hit.id) });
       }
     },
-    move(tool: WallTool, raw: Point) {
-      if (tool === 'room-rect' && rect) setRect([rect[0], clamp(raw)]);
+    move(tool: WallTool, raw: Point, zoom: number) {
+      if (tool === 'room-rect' && rect) setRect([rect[0], clamp(snapToRooms(walls, raw, SNAP_SCREEN_PX / zoom))]);
     },
     up(tool: WallTool) {
       if (tool !== 'room-rect' || !rect) return;

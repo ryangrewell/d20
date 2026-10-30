@@ -74,7 +74,7 @@ function MapSetup({ campaignId, map, imageUrl }: { campaignId: string; map: MapD
     }
   };
   const onPointerMove = (e: ReactPointerEvent) => {
-    if (isWallTool(tool) && !drag) return walls.move(tool, vp.toMap(e.clientX, e.clientY));
+    if (isWallTool(tool) && !drag) return walls.move(tool, vp.toMap(e.clientX, e.clientY), cam.zoom);
     if (!drag) return;
     if (drag.kind === 'pan') {
       vp.pan(e.clientX - drag.last.x, e.clientY - drag.last.y);
