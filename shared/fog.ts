@@ -19,7 +19,7 @@ export type FogState = {
 
 export const FOG_LIMITS = { maxPolygonPoints: 200, maxBrushPoints: 400, maxOpsPerScene: 5000 };
 
-function pointInPolygon(p: Point, poly: Point[]): boolean {
+export function pointInPolygon(p: Point, poly: Point[]): boolean {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
     const a = poly[i]!;
@@ -29,7 +29,7 @@ function pointInPolygon(p: Point, poly: Point[]): boolean {
   return inside;
 }
 
-function distToSegmentSq(p: Point, a: Point, b: Point): number {
+export function distToSegmentSq(p: Point, a: Point, b: Point): number {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const len = dx * dx + dy * dy;
