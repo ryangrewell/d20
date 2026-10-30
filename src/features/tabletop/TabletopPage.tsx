@@ -27,6 +27,7 @@ import {
   Video,
   Wand2,
   Eraser,
+  Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Camera } from '@shared/geometry/transform';
@@ -265,7 +266,8 @@ function Table({ engine, campaignId, sessionId }: { engine: SyncEngine; campaign
               <TabletopCanvas engine={engine} onCamera={(c) => setZoom(c.zoom)} cameraRef={camRef} />
               <InitiativeTracker engine={engine} />
               <LootCard engine={engine} />
-              {!snap.scene.map.calibration && isGM && (
+              {isGM && snap.scene.scene.id !== snap.session.activeSceneId && <PrivateViewBanner engine={engine} sceneId={snap.scene.scene.id} sceneName={snap.scene.scene.name} campaignId={campaignId} />}
+              {!snap.scene.map.calibration && isGM && snap.scene.scene.id === snap.session.activeSceneId && (
                 <div className="absolute left-1/2 top-3 -translate-x-1/2 rounded-lg border border-accent/40 bg-surface/90 px-3 py-1.5 text-xs">
                   This map has no scale yet.{' '}
                   <Link className="text-accent underline" to={`/campaigns/${campaignId}/maps/${snap.scene.map.id}`}>
@@ -402,13 +404,52 @@ function Players() {
   );
 }
 
+/** Shown to the GM while they look at a scene the players can't see. */
+function PrivateViewBanner({ engine, sceneId, sceneName, campaignId }: { engine: SyncEngine; sceneId: string; sceneName: string; campaignId: string }) {
+  const { data } = useCampaign(campaignId);
+  const activeSceneId = useTable((s) => s.snapshot?.session.activeSceneId);
+  const playersOn = data?.scenes.find((s) => s.id === activeSceneId)?.name;
+  const [busy, setBusy] = useState(false);
+  return (
+    <div role="status" className="absolute inset-x-0 top-20 z-10 mx-auto flex w-fit max-w-[calc(100%-1.5rem)] flex-wrap items-center justify-center gap-2 rounded-lg border border-accent/50 bg-surface/95 px-3 py-2 text-xs shadow-xl backdrop-blur">
+      <EyeOff className="h-4 w-4 shrink-0 text-accent" aria-hidden />
+      <span>
+        Only you can see <b>{sceneName}</b>. {playersOn ? <>Players are on {playersOn}.</> : 'Players have no map yet.'}
+      </span>
+      <Button
+        size="sm"
+        loading={busy}
+        onClick={async () => {
+          setBusy(true);
+          try {
+            await engine.command('switchActiveScene', { sceneId });
+          } catch (e) {
+            toast.error((e as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <Users className="h-3.5 w-3.5" aria-hidden /> Move players here
+      </Button>
+      {activeSceneId && (
+        <Button size="sm" variant="ghost" onClick={() => engine.viewScene(null)}>
+          Back to players' scene
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function ScenesSidebar({ campaignId, engine }: { campaignId: string; engine: SyncEngine }) {
   const { data, refetch } = useCampaign(campaignId);
   const activeSceneId = useTable((s) => s.snapshot?.session.activeSceneId);
+  const shownSceneId = useTable((s) => s.snapshot?.scene?.scene.id);
   const [creatingFor, setCreatingFor] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [checkpointsOpen, setCheckpointsOpen] = useState(false);
-  const activeScene = data?.scenes.find((s) => s.id === activeSceneId);
+  // Checkpoints follow whatever scene the GM is looking at, private or not.
+  const activeScene = data?.scenes.find((s) => s.id === shownSceneId);
   // Local breadcrumb so the GM can hop back after following a doorway or stairs.
   const [history, setHistory] = useState<string[]>([]);
   const lastScene = useRef<string | undefined>(undefined);
@@ -448,12 +489,19 @@ function ScenesSidebar({ campaignId, engine }: { campaignId: string; engine: Syn
         {(data?.scenes ?? []).map((s) => (
           <li key={s.id}>
             <button
-              className={cn('w-full rounded-md px-2 py-1.5 text-left text-sm', s.id === activeSceneId ? 'bg-accent/15 text-accent' : 'text-text hover:bg-surface-2')}
-              onClick={() => s.id !== activeSceneId && void engine.command('switchActiveScene', { sceneId: s.id }).catch((e: Error) => toast.error(e.message))}
-              aria-current={s.id === activeSceneId}
+              className={cn('flex w-full items-center gap-1 rounded-md px-2 py-1.5 text-left text-sm', s.id === shownSceneId ? 'bg-accent/15 text-accent' : 'text-text hover:bg-surface-2')}
+              // Opens the scene for the GM only; "Move players here" on the banner puts it on everyone's table.
+              // With no scene on the table yet there's nothing to keep private, so it goes straight on.
+              onClick={() => (activeSceneId ? engine.viewScene(s.id) : void engine.command('switchActiveScene', { sceneId: s.id }).catch((e: Error) => toast.error(e.message)))}
+              aria-current={s.id === shownSceneId}
+              title={s.id === activeSceneId ? 'The players are here' : 'Open privately. Players stay where they are.'}
             >
-              {s.name}
-              {s.id === activeSceneId && <span className="ml-1 text-[10px] uppercase">live</span>}
+              <span className="min-w-0 flex-1 truncate">{s.name}</span>
+              {s.id === activeSceneId && (
+                <span className="flex shrink-0 items-center gap-0.5 text-[10px] uppercase text-success">
+                  <Users className="h-3 w-3" aria-hidden /> players
+                </span>
+              )}
             </button>
           </li>
         ))}
@@ -480,7 +528,8 @@ function ScenesSidebar({ campaignId, engine }: { campaignId: string; engine: Syn
                 try {
                   const scene = await campaignApi.createScene(campaignId, { mapId: m.id, name: m.name, fogInitial: 'revealed' });
                   await refetch();
-                  await engine.command('switchActiveScene', { sceneId: scene.id });
+                  if (activeSceneId) engine.viewScene(scene.id);
+                  else await engine.command('switchActiveScene', { sceneId: scene.id });
                 } catch (e) {
                   toast.error((e as Error).message);
                 } finally {

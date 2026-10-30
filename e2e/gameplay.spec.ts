@@ -146,3 +146,52 @@ test('character sheet, dice, loot pickup and initiative through the UI', async (
   await gmCtx.close();
   await api.dispose();
 });
+
+test('GM prepares another scene privately, then moves the players there', async ({ browser }) => {
+  const api = await request.newContext({ baseURL: 'http://localhost:8787' });
+  const id = Date.now().toString(36);
+  const gm = await account(api, `gm-v-${id}@e2e.local`, 'GM');
+  const pl = await account(api, `pl-v-${id}@e2e.local`, `Wren ${id}`);
+  const campaign = await gm.call('POST', '/campaigns', { title: `Prep ${id}` });
+  const inv = await gm.call('POST', `/campaigns/${campaign.id}/invites`, {});
+  await pl.call('POST', '/invites/accept', { token: inv.token });
+  const sceneOf = async (name: string) => {
+    const img = png(400, 300);
+    const intent = await gm.call('POST', `/campaigns/${campaign.id}/maps/upload-intent`, { fileName: 'm.png', contentType: 'image/png', bytes: img.length });
+    await fetch(intent.uploadUrl, { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: new Blob([new Uint8Array(img)]) });
+    const map = await gm.call('POST', `/campaigns/${campaign.id}/maps`, { assetId: intent.assetId, name });
+    return gm.call('POST', `/campaigns/${campaign.id}/scenes`, { mapId: map.id, name, fogInitial: 'revealed' });
+  };
+  const hall = await sceneOf('Hall');
+  const cellar = await sceneOf('Cellar');
+  const session = await gm.call('POST', `/campaigns/${campaign.id}/sessions`, {});
+  await gm.cmd(session.id, 'switchActiveScene', { sceneId: hall.id });
+  await gm.call('POST', `/sessions/${session.id}/transition`, { action: 'start' });
+  const rat = (await gm.cmd(session.id, 'spawnSceneObject', { sceneId: cellar.id, objectType: 'CREATURE', x: 100, y: 100, label: 'Rat', visibility: 'VISIBLE_TO_ALL' })).result.objectId as string;
+
+  const p = await (await browser.newContext()).newPage();
+  const g = await (await browser.newContext()).newPage();
+  const tableUrl = `/campaigns/${campaign.id}/sessions/${session.id}`;
+  await signedInPage(p, pl.token, tableUrl);
+  await signedInPage(g, gm.token, tableUrl);
+  await expect(p.getByText('Connected')).toBeVisible();
+  const sceneName = async (page: Page) => (await table(page))?.snapshot?.scene?.scene.name;
+
+  // Opening Cellar from the sidebar is private: the player stays in the Hall.
+  await g.getByRole('complementary', { name: 'Scenes' }).getByRole('button', { name: /^Cellar/ }).click();
+  await expect(g.getByText('Only you can see')).toBeVisible();
+  await expect.poll(() => sceneName(g)).toBe('Cellar');
+  expect(await sceneName(p)).toBe('Hall');
+
+  // GM rearranges the Cellar; the GM's view updates live, the player sees nothing of it.
+  await gm.cmd(session.id, 'moveToken', { objectId: rat, x: 250, y: 120 });
+  await expect.poll(async () => (await table(g))?.objects[rat]?.x).toBe(250);
+  expect((await table(p))?.objects[rat]).toBeUndefined();
+  expect(await sceneName(p)).toBe('Hall');
+
+  // Moving the players brings them to the prepared scene, token already in place.
+  await g.getByRole('button', { name: 'Move players here' }).click();
+  await expect.poll(() => sceneName(p)).toBe('Cellar');
+  await expect.poll(async () => (await table(p))?.objects[rat]?.x).toBe(250);
+  await expect(g.getByText('Only you can see')).toBeHidden();
+});

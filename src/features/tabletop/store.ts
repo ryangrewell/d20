@@ -52,6 +52,8 @@ export type TableState = {
   unread: number;
   /** Whether older chat messages exist beyond what is loaded. */
   chatHasMore: boolean;
+  /** GM only: a scene the GM is looking at privately; null = the scene the players are on. */
+  viewSceneId: string | null;
 };
 
 export const initialTableState = (): TableState => ({
@@ -77,6 +79,7 @@ export const initialTableState = (): TableState => ({
   focus: null,
   unread: 0,
   chatHasMore: false,
+  viewSceneId: null,
 });
 
 export const useTable = create<TableState>(() => initialTableState());

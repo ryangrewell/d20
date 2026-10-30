@@ -101,6 +101,18 @@ export class SyncEngine {
     }
   }
 
+  /**
+   * GM only: look at (and edit) another scene without moving the players. Players' views and
+   * realtime feeds are untouched; the server only ever shows them the active scene.
+   */
+  viewScene(sceneId: string | null) {
+    const s = getTable();
+    const next = sceneId && sceneId !== s.snapshot?.session.activeSceneId ? sceneId : null;
+    if (next === s.viewSceneId) return;
+    setTable({ viewSceneId: next });
+    void this.resync('view');
+  }
+
   /** Full resubscribe + snapshot. Coalesces concurrent requests. */
   async resync(reason: string) {
     if (this.disposed) return;
@@ -110,7 +122,8 @@ export class SyncEngine {
     }
     this.resyncing = true;
     try {
-      const path = `/sessions/${this.sessionId}/snapshot${this.view === 'shared' ? '?as=shared' : ''}`;
+      const viewing = this.view === 'auto' ? getTable().viewSceneId : null;
+      const path = `/sessions/${this.sessionId}/snapshot${this.view === 'shared' ? '?as=shared' : viewing ? `?scene=${viewing}` : ''}`;
       // Fetch once to learn the authorised channels and epoch, subscribe, then fetch again for a consistent base.
       let snap = await api<SessionSnapshotDto>(path);
       if (this.disposed) return;
@@ -138,7 +151,11 @@ export class SyncEngine {
       if (getTable().status === 'loading' || getTable().status === 'error') setTable({ status: 'connected' });
     } catch (err) {
       if (this.disposed) return;
-      if (err instanceof SubscribeDenied || (err instanceof ApiError && (err.status === 403 || err.status === 404))) {
+      if (err instanceof ApiError && err.status === 404 && getTable().viewSceneId) {
+        // The privately viewed scene is gone (deleted elsewhere); fall back to the players' scene.
+        setTable({ viewSceneId: null });
+        this.resyncQueued = true;
+      } else if (err instanceof SubscribeDenied || (err instanceof ApiError && (err.status === 403 || err.status === 404))) {
         setTable({ status: 'denied', error: err instanceof ApiError ? err.message : 'You no longer have access to this session.' });
       } else {
         setTable({ status: 'error', error: (err as Error).message });
@@ -217,6 +234,8 @@ export class SyncEngine {
         return;
       case 'ACTIVE_SCENE_CHANGED':
         if (!s.snapshot?.me.isGM || this.view === 'shared') toast.message('The GM changed the scene');
+        // A GM who was previewing this scene is now simply on it with everyone else.
+        if (s.viewSceneId === item.sceneId) setTable({ viewSceneId: null });
         void this.resync('scene');
         return;
       case 'SESSION_UPDATED': {
