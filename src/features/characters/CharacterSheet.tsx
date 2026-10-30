@@ -352,14 +352,16 @@ function Inventory({ campaignId, characterId, items, editable, isGM }: { campaig
       {sorted.length === 0 && <p className="text-xs text-faint">Nothing carried yet.</p>}
       <ul className="space-y-1">
         {sorted.map((i) => (
-          <li key={i.id} className="flex items-center gap-2 rounded-md bg-surface-2 px-2 py-1 text-xs">
-            <span className="min-w-0 flex-1 truncate" title={i.description || i.name}>
-              {i.name}
+          // Names wrap instead of truncating; in narrow panels the controls drop to their own line.
+          <li key={i.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-surface-2 px-2 py-1.5 text-xs">
+            <div className="min-w-[9rem] flex-1">
+              <span className="break-words font-medium">{i.name}</span>
               {i.tags.includes('loot') && <span className="ml-1 text-faint">· loot</span>}
               {isGM && i.gmNote && <span className="ml-1 text-accent">· GM note</span>}
-            </span>
+              {i.description && <p className="line-clamp-2 break-words text-faint">{i.description}</p>}
+            </div>
             {editable ? (
-              <>
+              <div className="ml-auto flex items-center gap-1">
                 <Button size="icon" variant="ghost" className="h-6 w-6" aria-label={`Use one ${i.name}`} onClick={() => void run(characterApi.updateItem(campaignId, characterId, i.id, { quantity: Math.max(0, i.quantity - 1) }))}>
                   <Minus className="h-3 w-3" />
                 </Button>
@@ -380,7 +382,7 @@ function Inventory({ campaignId, characterId, items, editable, isGM }: { campaig
                 <Button size="icon" variant="ghost" className="h-6 w-6" aria-label={`Remove ${i.name}`} onClick={() => void run(characterApi.removeItem(campaignId, characterId, i.id))}>
                   <Trash2 className="h-3 w-3" />
                 </Button>
-              </>
+              </div>
             ) : (
               <span className="tabular-nums">×{i.quantity}</span>
             )}
